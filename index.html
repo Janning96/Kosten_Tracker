@@ -1,183 +1,22 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Kosten-Kalkulation App</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0f172a">
-  <link rel="icon" href="icon-192.png">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script defer src="app.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kosten-Kalkulation</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header class="appbar">
-  <div class="brand">
-    <span class="logo">€</span>
-    <h1>Kosten‑Kalkulation</h1>
-  </div>
-  <button id="btn-install" class="ghost" hidden>Installieren</button>
-</header>
-
-<main class="container">
-  <section class="card">
-    <h2>Neuer Eintrag</h2>
-    <form id="entry-form" class="entry-grid">
-      <label for="date">Datum</label>
-      <input id="date" name="date" type="date" required />
-      <label for="category">Kategorie</label>
-      <select id="category" name="category" required></select>
-      <label for="amount">Betrag</label>
-      <input id="amount" name="amount" inputmode="decimal" placeholder="0,00 €" required />
-      <div class="entry-actions">
-        <button type="submit" class="primary" title="Eintrag hinzufügen">Eintrag</button>
-        <button type="button" id="btn-manage-cats" class="ghost">Kategorien…</button>
-      </div>
-    </form>
-  </section>
-
-  <section class="card">
-    <h2>Ansicht & Filter</h2>
-    <div class="toolbar">
-      <div class="tool">
-        <label for="month">Monat</label>
-        <input id="month" type="month">
-        <button id="btn-this-month" class="ghost">Diesen Monat</button>
-      </div>
-      <div class="tool">
-        <label for="from">Von</label>
-        <input id="from" type="date">
-        <label for="to">Bis</label>
-        <input id="to" type="date">
-        <button id="btn-apply-range" class="ghost">Zeitraum anwenden</button>
-        <button id="btn-clear-range" class="ghost">Zeitraum löschen</button>
-      </div>
-    </div>
-    <div id="summary" class="summary"></div>
-    <table id="entries-table">
-      <thead>
-        <tr><th>Datum</th><th>Kategorie</th><th class="num">Betrag</th><th></th></tr>
-      </thead>
-      <tbody></tbody>
-      <tfoot>
-        <tr><th colspan="2">Summe</th><th class="num" id="total">—</th><th></th></tr>
-      </tfoot>
-    </table>
-  </section>
-
-  <section class="card charts">
-    <div class="charts-grid">
-      <div>
-        <h2>Trend (gestapelte Balken je Monat)</h2>
-        <canvas id="trend-chart" height="220"></canvas>
-      </div>
-      <div>
-        <h2>Kategorien (Balken)</h2>
-        <canvas id="bar-chart" height="220"></canvas>
-      </div>
-      <div>
-        <h2>Kategorien (Kuchen)</h2>
-        <canvas id="pie-chart" height="220"></canvas>
-      </div>
-      <div>
-        <div class="flex-between">
-          <h2>Monatsentwicklung je Kategorie</h2>
-          <div class="inline">
-            <label for="cat-series">Kategorie</label>
-            <select id="cat-series"></select>
-          </div>
-        </div>
-        <canvas id="line-chart" height="220"></canvas>
-      </div>
-    </div>
-    <div class="hint">Tipp: In allen Diagrammen kannst du Kategorien im <b>Legendeneintrag</b> ein/ausblenden.</div>
-  </section>
-
-  <section class="card">
-    <h2>Daten</h2>
-    <div class="row wrap">
-      <button id="btn-save" class="primary">Speichern</button>
-      <button id="btn-load" class="ghost">Laden</button>
-      <label class="file">
-        <input id="file-load-other" type="file" accept="application/json" hidden>
-        <span>Andere Datei laden…</span>
-      </label>
-      <button id="btn-export-json" class="ghost">Export (JSON)</button>
-      <button id="btn-export-pdf" class="ghost">Export (PDF)</button>
-      <button id="btn-export-xlsx" class="ghost">Export (Excel)</button>
-      <button id="btn-wipe" class="danger">Alles löschen</button>
-    </div>
-    <small class="muted">
-      „Speichern/Laden“ nutzt – sofern verfügbar – den <em>Dateizugriff des Browsers</em> (Datei „Kosten_Kalkulation_App.json“).
-      Auf iPhone/Safari wirst du beim ersten Speichern um Bestätigung gebeten.
-    </small>
-  </section>
-</main>
-
-<dialog id="cats-dialog">
-  <form method="dialog" id="cats-form">
-    <h3>Kategorien verwalten</h3>
-    <ul id="cats-list"></ul>
-    <div class="row">
-      <input id="cat-new" placeholder="Neue Kategorie" />
-      <button type="button" id="btn-cat-add">Hinzufügen</button>
-    </div>
-    <menu>
-      <button value="cancel">Fertig</button>
-    </menu>
-  </form>
-</dialog>
-
-<dialog id="edit-dialog">
-  <form method="dialog" id="edit-form">
-    <h3>Eintrag bearbeiten</h3>
-    <div class="row">
-      <label for="edit-date">Datum</label>
-      <input id="edit-date" type="date" required>
-    </div>
-    <div class="row">
-      <label for="edit-category">Kategorie</label>
-      <select id="edit-category" required></select>
-    </div>
-    <div class="row">
-      <label for="edit-amount">Betrag</label>
-      <input id="edit-amount" inputmode="decimal" placeholder="0,00 €" required>
-    </div>
-    <menu>
-      <button value="cancel" class="ghost">Abbrechen</button>
-      <button id="btn-save-edit" value="ok" class="primary">Speichern</button>
-    </menu>
-  </form>
-</dialog>
-
-<footer class="footer">
-  <small>Offline-fähig • Lokale Speicherung (IndexedDB) • PWA</small>
-</footer>
-
-<script>
-  let deferredPrompt;
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    const btn = document.getElementById('btn-install');
-    btn.hidden = false;
-    btn.addEventListener('click', async () => {
-      btn.hidden = true;
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice;
-        deferredPrompt = null;
-      }
-    });
-  });
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js');
-  }
-</script>
+<div class="container">
+<h1>Kosten-Kalkulation</h1>
+<!-- Eingabeformular -->
+<input id="amount" placeholder="Betrag">
+<input id="date" type="date">
+<select id="category"></select>
+<button id="addBtn">Eintrag</button>
+</div>
+<div id="keyboard-spacer" style="height:0;"></div>
+<script src="app.js"></script>
 </body>
 </html>
