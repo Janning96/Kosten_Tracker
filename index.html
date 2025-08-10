@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kosten-Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <!-- Chart.js für Diagramme -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+<header>
+  <h1>💶 Kosten-Tracker</h1>
+  <button id="btn-install" hidden>Auf dem Home-Bildschirm installieren</button>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Neuer Eintrag</h2>
+    <form id="entry-form">
+      <div class="row">
+        <label for="date">Datum</label>
+        <input id="date" name="date" type="date" required />
+      </div>
+      <div class="row">
+        <label for="category">Kategorie</label>
+        <select id="category" name="category" required></select>
+        <button type="button" id="btn-manage-cats" class="secondary">Kategorien…</button>
+      </div>
+      <div class="row">
+        <label for="amount">Betrag</label>
+        <input id="amount" name="amount" inputmode="decimal" placeholder="0,00 €" required />
+      </div>
+      <button type="submit">Hinzufügen</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Übersicht</h2>
+    <div class="row">
+      <label for="month">Monat</label>
+      <input id="month" type="month">
+      <button id="btn-this-month" class="secondary">Diesen Monat</button>
+    </div>
+    <div id="month-summary" class="summary"></div>
+    <table id="entries-table">
+      <thead>
+        <tr><th>Datum</th><th>Kategorie</th><th class="num">Betrag</th><th></th></tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr><th colspan="2">Summe</th><th class="num" id="month-total">—</th><th></th></tr>
+      </tfoot>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Trends (Kategorien je Monat)</h2>
+    <canvas id="trend-chart" height="200"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>Daten</h2>
+    <div class="row wrap">
+      <button id="btn-export">Export (JSON)</button>
+      <label class="file">
+        <input id="file-import" type="file" accept="application/json" hidden>
+        <span>Import (JSON)</span>
+      </label>
+      <button id="btn-wipe" class="danger">Alles löschen</button>
+    </div>
+  </section>
+</main>
+
+<dialog id="cats-dialog">
+  <form method="dialog" id="cats-form">
+    <h3>Kategorien verwalten</h3>
+    <ul id="cats-list"></ul>
+    <div class="row">
+      <input id="cat-new" placeholder="Neue Kategorie" />
+      <button type="button" id="btn-cat-add">Hinzufügen</button>
+    </div>
+    <menu>
+      <button value="cancel">Fertig</button>
+    </menu>
+  </form>
+</dialog>
+
+<footer>
+  <small>Offline-fähig • Lokale Speicherung (IndexedDB)</small>
+</footer>
+
+<script>
+  // PWA Install Prompt
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    const btn = document.getElementById('btn-install');
+    btn.hidden = false;
+    btn.addEventListener('click', async () => {
+      btn.hidden = true;
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+      }
+    });
+  });
+  // Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./service-worker.js');
+  }
+</script>
+</body>
+</html>
