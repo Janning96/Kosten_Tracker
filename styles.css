@@ -2,7 +2,7 @@
 * { box-sizing: border-box; }
 html, body { margin:0; padding:0; font-family: -apple-system, system-ui, Segoe UI, Roboto, Ubuntu, sans-serif; background: var(--bg); color:#111; }
 header { position: sticky; top:0; background:#fff; border-bottom:1px solid var(--border); padding: var(--pad); display:flex; gap:12px; align-items:center; justify-content:space-between; }
-main { padding: var(--pad); display: grid; gap: var(--pad); max-width: 900px; margin: 0 auto; }
+main { padding: var(--pad); display: grid; gap: var(--pad); max-width: 1000px; margin: 0 auto; }
 .card { background: var(--card); border:1px solid var(--border); border-radius: var(--radius); padding: var(--pad); }
 h1, h2, h3 { margin: 0 0 10px; }
 .row { display:flex; gap:10px; align-items:center; margin: 8px 0; }
@@ -21,3 +21,5 @@ ul { list-style: none; padding:0; margin:0; }
 #cats-list li:last-child { border-bottom:none; }
 summary, .summary { color:#444; }
 footer { text-align:center; color:#666; padding: 20px; }
+.badge { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:#f5f5f7; font-size:12px; color:#555; }
+.action { white-space: nowrap; }

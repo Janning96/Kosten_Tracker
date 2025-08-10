@@ -9,8 +9,10 @@
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="styles.css">
-  <!-- Chart.js für Diagramme -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -41,11 +43,19 @@
   </section>
 
   <section class="card">
-    <h2>Übersicht</h2>
-    <div class="row">
+    <h2>Ansicht & Filter</h2>
+    <div class="row wrap">
       <label for="month">Monat</label>
       <input id="month" type="month">
       <button id="btn-this-month" class="secondary">Diesen Monat</button>
+    </div>
+    <div class="row wrap">
+      <label for="from">Von</label>
+      <input id="from" type="date">
+      <label for="to">Bis</label>
+      <input id="to" type="date">
+      <button id="btn-apply-range" class="secondary">Zeitraum anwenden</button>
+      <button id="btn-clear-range" class="secondary">Zeitraum löschen</button>
     </div>
     <div id="month-summary" class="summary"></div>
     <table id="entries-table">
@@ -54,7 +64,7 @@
       </thead>
       <tbody></tbody>
       <tfoot>
-        <tr><th colspan="2">Summe</th><th class="num" id="month-total">—</th><th></th></tr>
+        <tr><th colspan="2">Summe</th><th class="num" id="total">—</th><th></th></tr>
       </tfoot>
     </table>
   </section>
@@ -68,6 +78,8 @@
     <h2>Daten</h2>
     <div class="row wrap">
       <button id="btn-export">Export (JSON)</button>
+      <button id="btn-export-pdf">Export (PDF)</button>
+      <button id="btn-export-xlsx">Export (Excel)</button>
       <label class="file">
         <input id="file-import" type="file" accept="application/json" hidden>
         <span>Import (JSON)</span>
@@ -91,12 +103,33 @@
   </form>
 </dialog>
 
+<dialog id="edit-dialog">
+  <form method="dialog" id="edit-form">
+    <h3>Eintrag bearbeiten</h3>
+    <div class="row">
+      <label for="edit-date">Datum</label>
+      <input id="edit-date" type="date" required>
+    </div>
+    <div class="row">
+      <label for="edit-category">Kategorie</label>
+      <select id="edit-category" required></select>
+    </div>
+    <div class="row">
+      <label for="edit-amount">Betrag</label>
+      <input id="edit-amount" inputmode="decimal" placeholder="0,00 €" required>
+    </div>
+    <menu>
+      <button value="cancel" class="secondary">Abbrechen</button>
+      <button id="btn-save-edit" value="ok">Speichern</button>
+    </menu>
+  </form>
+</dialog>
+
 <footer>
   <small>Offline-fähig • Lokale Speicherung (IndexedDB)</small>
 </footer>
 
 <script>
-  // PWA Install Prompt
   let deferredPrompt;
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
@@ -112,7 +145,6 @@
       }
     });
   });
-  // Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js');
   }

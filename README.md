@@ -1,19 +1,12 @@
 
-# Kosten-Tracker (PWA)
-Private PWA, die lokal auf dem iPhone/Browser läuft. Offline-fähig, Daten in IndexedDB.
+# Kosten-Tracker (Advanced PWA)
+Erweiterte private PWA für iPhone/Browser. Offline, lokale Daten (IndexedDB).
 
-## Features
-- Monatsansicht mit Summe je Kategorie
-- Gestapeltes Balkendiagramm (Kategorien über Monate)
-- Kategorien verwalten
-- Euro-Format (de-DE), Eingabe per Komma
-- Export/Import (JSON)
-- PWA: Installierbar auf iPhone (Safari → Teilen → Zum Home-Bildschirm)
-
-## Dev
-- Statische Seite: kein Backend nötig
-- Einfach mit GitHub Pages, Vercel oder Netlify deployen
-
-## Lokale Entwicklung
-- Beliebigen Static Server starten (z. B. VS Code Live Server). 
-  Service Worker greift nur über HTTP(S), nicht über file://.
+## Neu
+- Kategorien: Café, Restaurant, Klamotten, Lebensmittel, Urlaub, Shoppen, Transport, Gesundheit, Unterhaltung (+ Undefiniert).
+- Kategorien-CRUD, alphabetische Sortierung, „Undefiniert“ fix am Ende.
+- Löschen einer Kategorie setzt alle betroffenen Einträge automatisch auf „Undefiniert“.
+- Einträge nachträglich bearbeiten (Datum, Kategorie, Betrag).
+- Monatsansicht ODER frei wählbarer Zeitraum (Von/Bis).
+- Export: JSON, PDF, Excel (XLSX) – jeweils für die aktuell gefilterte Ansicht.
+- DB Schema-Versionierung (v2) ohne Datenverlust.
