@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Kosten-Tracker</title>
+  <title>Kosten-Kalkulation App</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#0f172a">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="styles.css">
@@ -16,48 +16,49 @@
   <script defer src="app.js"></script>
 </head>
 <body>
-<header>
-  <h1>💶 Kosten-Tracker</h1>
-  <button id="btn-install" hidden>Auf dem Home-Bildschirm installieren</button>
+<header class="appbar">
+  <div class="brand">
+    <span class="logo">€</span>
+    <h1>Kosten‑Kalkulation</h1>
+  </div>
+  <button id="btn-install" class="ghost" hidden>Installieren</button>
 </header>
 
-<main>
+<main class="container">
   <section class="card">
     <h2>Neuer Eintrag</h2>
-    <form id="entry-form">
-      <div class="row">
-        <label for="date">Datum</label>
-        <input id="date" name="date" type="date" required />
+    <form id="entry-form" class="entry-grid">
+      <label for="date">Datum</label>
+      <input id="date" name="date" type="date" required />
+      <label for="category">Kategorie</label>
+      <select id="category" name="category" required></select>
+      <label for="amount">Betrag</label>
+      <input id="amount" name="amount" inputmode="decimal" placeholder="0,00 €" required />
+      <div class="entry-actions">
+        <button type="submit" class="primary" title="Eintrag hinzufügen">Eintrag</button>
+        <button type="button" id="btn-manage-cats" class="ghost">Kategorien…</button>
       </div>
-      <div class="row">
-        <label for="category">Kategorie</label>
-        <select id="category" name="category" required></select>
-        <button type="button" id="btn-manage-cats" class="secondary">Kategorien…</button>
-      </div>
-      <div class="row">
-        <label for="amount">Betrag</label>
-        <input id="amount" name="amount" inputmode="decimal" placeholder="0,00 €" required />
-      </div>
-      <button type="submit">Hinzufügen</button>
     </form>
   </section>
 
   <section class="card">
     <h2>Ansicht & Filter</h2>
-    <div class="row wrap">
-      <label for="month">Monat</label>
-      <input id="month" type="month">
-      <button id="btn-this-month" class="secondary">Diesen Monat</button>
+    <div class="toolbar">
+      <div class="tool">
+        <label for="month">Monat</label>
+        <input id="month" type="month">
+        <button id="btn-this-month" class="ghost">Diesen Monat</button>
+      </div>
+      <div class="tool">
+        <label for="from">Von</label>
+        <input id="from" type="date">
+        <label for="to">Bis</label>
+        <input id="to" type="date">
+        <button id="btn-apply-range" class="ghost">Zeitraum anwenden</button>
+        <button id="btn-clear-range" class="ghost">Zeitraum löschen</button>
+      </div>
     </div>
-    <div class="row wrap">
-      <label for="from">Von</label>
-      <input id="from" type="date">
-      <label for="to">Bis</label>
-      <input id="to" type="date">
-      <button id="btn-apply-range" class="secondary">Zeitraum anwenden</button>
-      <button id="btn-clear-range" class="secondary">Zeitraum löschen</button>
-    </div>
-    <div id="month-summary" class="summary"></div>
+    <div id="summary" class="summary"></div>
     <table id="entries-table">
       <thead>
         <tr><th>Datum</th><th>Kategorie</th><th class="num">Betrag</th><th></th></tr>
@@ -69,23 +70,52 @@
     </table>
   </section>
 
-  <section class="card">
-    <h2>Trends (Kategorien je Monat)</h2>
-    <canvas id="trend-chart" height="200"></canvas>
+  <section class="card charts">
+    <div class="charts-grid">
+      <div>
+        <h2>Trend (gestapelte Balken je Monat)</h2>
+        <canvas id="trend-chart" height="220"></canvas>
+      </div>
+      <div>
+        <h2>Kategorien (Balken)</h2>
+        <canvas id="bar-chart" height="220"></canvas>
+      </div>
+      <div>
+        <h2>Kategorien (Kuchen)</h2>
+        <canvas id="pie-chart" height="220"></canvas>
+      </div>
+      <div>
+        <div class="flex-between">
+          <h2>Monatsentwicklung je Kategorie</h2>
+          <div class="inline">
+            <label for="cat-series">Kategorie</label>
+            <select id="cat-series"></select>
+          </div>
+        </div>
+        <canvas id="line-chart" height="220"></canvas>
+      </div>
+    </div>
+    <div class="hint">Tipp: In allen Diagrammen kannst du Kategorien im <b>Legendeneintrag</b> ein/ausblenden.</div>
   </section>
 
   <section class="card">
     <h2>Daten</h2>
     <div class="row wrap">
-      <button id="btn-export">Export (JSON)</button>
-      <button id="btn-export-pdf">Export (PDF)</button>
-      <button id="btn-export-xlsx">Export (Excel)</button>
+      <button id="btn-save" class="primary">Speichern</button>
+      <button id="btn-load" class="ghost">Laden</button>
       <label class="file">
-        <input id="file-import" type="file" accept="application/json" hidden>
-        <span>Import (JSON)</span>
+        <input id="file-load-other" type="file" accept="application/json" hidden>
+        <span>Andere Datei laden…</span>
       </label>
+      <button id="btn-export-json" class="ghost">Export (JSON)</button>
+      <button id="btn-export-pdf" class="ghost">Export (PDF)</button>
+      <button id="btn-export-xlsx" class="ghost">Export (Excel)</button>
       <button id="btn-wipe" class="danger">Alles löschen</button>
     </div>
+    <small class="muted">
+      „Speichern/Laden“ nutzt – sofern verfügbar – den <em>Dateizugriff des Browsers</em> (Datei „Kosten_Kalkulation_App.json“).
+      Auf iPhone/Safari wirst du beim ersten Speichern um Bestätigung gebeten.
+    </small>
   </section>
 </main>
 
@@ -119,14 +149,14 @@
       <input id="edit-amount" inputmode="decimal" placeholder="0,00 €" required>
     </div>
     <menu>
-      <button value="cancel" class="secondary">Abbrechen</button>
-      <button id="btn-save-edit" value="ok">Speichern</button>
+      <button value="cancel" class="ghost">Abbrechen</button>
+      <button id="btn-save-edit" value="ok" class="primary">Speichern</button>
     </menu>
   </form>
 </dialog>
 
-<footer>
-  <small>Offline-fähig • Lokale Speicherung (IndexedDB)</small>
+<footer class="footer">
+  <small>Offline-fähig • Lokale Speicherung (IndexedDB) • PWA</small>
 </footer>
 
 <script>

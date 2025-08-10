@@ -1,10 +1,10 @@
 {
-  "name": "Kosten-Tracker",
+  "name": "Kosten-Kalkulation",
   "short_name": "Kosten",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
   "icons": [
     {
       "src": "icon-192.png",

@@ -1,12 +1,7 @@
 
-# Kosten-Tracker (Advanced PWA)
-Erweiterte private PWA für iPhone/Browser. Offline, lokale Daten (IndexedDB).
-
-## Neu
-- Kategorien: Café, Restaurant, Klamotten, Lebensmittel, Urlaub, Shoppen, Transport, Gesundheit, Unterhaltung (+ Undefiniert).
-- Kategorien-CRUD, alphabetische Sortierung, „Undefiniert“ fix am Ende.
-- Löschen einer Kategorie setzt alle betroffenen Einträge automatisch auf „Undefiniert“.
-- Einträge nachträglich bearbeiten (Datum, Kategorie, Betrag).
-- Monatsansicht ODER frei wählbarer Zeitraum (Von/Bis).
-- Export: JSON, PDF, Excel (XLSX) – jeweils für die aktuell gefilterte Ansicht.
-- DB Schema-Versionierung (v2) ohne Datenverlust.
+# Kosten‑Kalkulation (Pro)
+- Neuer „Eintrag“-Button direkt neben den Eingaben.
+- Speichern/Laden der Datei **Kosten_Kalkulation_App.json** über Browser-Dateizugriff (falls unterstützt) oder Download/Upload-Fallback.
+- Charts: Trend (gestapelt), Balken, Kuchen, Linienserie pro Kategorie.
+- Kategorien an/abwählbar per Legende in allen Charts.
+- Moderner Dark-UI-Look.
