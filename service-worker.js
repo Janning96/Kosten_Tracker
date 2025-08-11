@@ -1,4 +1,4 @@
-const CACHE = 'kt-pro-amount-v1';
+const CACHE = 'kt-handysync-v1';
 const ASSETS = [
   './',
   './index.html',

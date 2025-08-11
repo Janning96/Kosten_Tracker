@@ -1,6 +1,6 @@
-// DB + Utilities (wie zuvor)
+// Handy-optimiert + Auto-Sync
 const DB_NAME = 'expense-tracker-db';
-const DB_VERSION = 3;
+const DB_VERSION = 4; // meta keys: fileHandle, autoSync
 let db;
 
 function openDB() {
@@ -59,22 +59,24 @@ async function getCategories() {
 
 const $ = (id)=>document.getElementById(id);
 
-// File persistence pieces (unchanged from pro)
 async function getSavedFileHandle() { return new Promise(res=>{ const r = tx('meta').get('fileHandle'); r.onsuccess=()=>res(r.result); r.onerror=()=>res(null); }); }
 async function setSavedFileHandle(handle){ await put('meta', handle, 'fileHandle'); }
+async function clearSavedFileHandle(){ await del('meta','fileHandle'); }
+
+async function getAutoSync(){ return new Promise(res=>{ const r=tx('meta').get('autoSync'); r.onsuccess=()=>res(Boolean(r.result)); r.onerror=()=>res(false); }); }
+async function setAutoSync(v){ await put('meta', Boolean(v), 'autoSync'); }
 
 let trendChart, barChart, pieChart, lineChart;
+let syncTimer = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   await openDB();
   await put('meta', (await getCategories()), 'categories');
   await renderCategories();
 
-  // defaults
   $('date').valueAsDate = new Date();
   $('month').value = new Date().toISOString().slice(0,7);
 
-  // events
   $('btn-manage-cats').addEventListener('click', openCatsDialog);
   $('btn-cat-add').addEventListener('click', addCategory);
   $('cats-dialog').addEventListener('close', () => renderCategories());
@@ -89,16 +91,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('file-load-other').addEventListener('change', onLoadOther);
   $('btn-save').addEventListener('click', onSave);
   $('btn-load').addEventListener('click', onLoadKnown);
+  $('btn-choose-file').addEventListener('click', chooseStandardFile);
+  $('btn-clear-file').addEventListener('click', async() => { await clearSavedFileHandle(); updateFileStatus(); });
 
   $('btn-export-json').addEventListener('click', exportJSON);
   $('btn-export-pdf').addEventListener('click', exportPDF);
   $('btn-export-xlsx').addEventListener('click', exportXLSX);
   $('btn-wipe').addEventListener('click', onWipe);
 
-  // iOS keyboard helper for inputs in dialogs
+  const auto = await getAutoSync();
+  const cb = $('auto-sync');
+  cb.checked = auto;
+  cb.addEventListener('change', async () => { await setAutoSync(cb.checked); });
+
   setupKeyboardVisibility();
 
   await refresh();
+  updateFileStatus();
   tryAutoLoadOnStart();
 });
 
@@ -114,7 +123,6 @@ async function renderCategories(cats) {
   });
 }
 
-// --- Amount Dialog Flow ---
 function openAmountDialog(){
   const dlg = $('amount-dialog');
   const input = $('amount-input');
@@ -122,7 +130,6 @@ function openAmountDialog(){
   dlg.showModal();
   setTimeout(()=> input.focus(), 0);
 
-  // Confirm/cancel handled by form submit result
   $('amount-form').onsubmit = async (ev) => {
     ev.preventDefault();
     if ((ev.submitter?.id || '') !== 'btn-amount-ok') { dlg.close(); return; }
@@ -133,13 +140,13 @@ function openAmountDialog(){
       await put('entries', { date, category, amount: amountCents });
       dlg.close();
       await refresh();
+      scheduleSync();
     } catch(err) {
       alert(err.message || 'Ungültiger Betrag');
     }
   };
 }
 
-// --- Categories dialog ---
 async function openCatsDialog() {
   const dialog = $('cats-dialog');
   const ul = $('cats-list');
@@ -165,6 +172,7 @@ async function openCatsDialog() {
       cats[idx] = name;
       cats = cats.filter(c=>c!==UNDEF).sort((a,b)=>a.localeCompare(b,'de')).concat([UNDEF]);
       await put('meta', cats, 'categories'); await renderCategories(cats); openCatsDialog();
+      scheduleSync();
     } else if (btn.dataset.action === 'delete') {
       const delCat = cats[idx];
       if (delCat === UNDEF) return;
@@ -179,6 +187,7 @@ async function openCatsDialog() {
       });
       cats = cats.filter(c => c !== delCat);
       await put('meta', cats, 'categories'); await renderCategories(cats); openCatsDialog(); await refresh();
+      scheduleSync();
     }
   };
   dialog.showModal();
@@ -190,9 +199,9 @@ async function addCategory() {
   if (!cats.includes(name)) cats = cats.filter(c=>c!==UNDEF).concat([name]).sort((a,b)=>a.localeCompare(b,'de')).concat([UNDEF]);
   await put('meta', cats, 'categories');
   input.value=''; await renderCategories(cats); openCatsDialog();
+  scheduleSync();
 }
 
-// --- Table & charts (same as before; amount now only from dialog) ---
 async function refresh(){
   const entries = await getAll('entries');
   const month = $('month').value;
@@ -227,6 +236,7 @@ async function refresh(){
       if (!confirm('Eintrag löschen?')) return;
       await del('entries', Number(btn.dataset.del));
       await refresh();
+      scheduleSync();
     } else if (btn.dataset.edit) {
       openEditDialog(Number(btn.dataset.edit));
     }
@@ -241,7 +251,6 @@ async function refresh(){
   renderCharts(entries, filtered);
 }
 
-// Edit existing entry
 async function openEditDialog(id){
   const store = tx('entries');
   const req = store.get(id);
@@ -270,13 +279,13 @@ document.getElementById('edit-form')?.addEventListener('submit', async (ev) => {
     });
     $('edit-dialog').close();
     await refresh();
+    scheduleSync();
   } catch(err) { alert(err.message || 'Konnte Eintrag nicht speichern'); }
 });
 
 async function renderCharts(allEntries, filtered) {
   const cats = await getCategories();
 
-  // Trend (stacked)
   const agg = new Map();
   allEntries.forEach(e=>{
     const key = yyyymm(e.date);
@@ -292,7 +301,6 @@ async function renderCharts(allEntries, filtered) {
     options: { responsive:true, scales:{ x:{stacked:true}, y:{stacked:true, ticks:{callback:v=>CURRENCY.format(v)}} }, plugins:{ legend:{position:'bottom'} } }
   });
 
-  // Bar/Pie for filtered
   const byCat = {}; filtered.forEach(e => { byCat[e.category] = (byCat[e.category]||0) + e.amount; });
   const barLabels = Object.keys(byCat).sort((a,b)=>a.localeCompare(b,'de'));
   const barData = barLabels.map(k => byCat[k]/100);
@@ -311,7 +319,6 @@ async function renderCharts(allEntries, filtered) {
     options: { responsive:true, plugins:{ legend:{ position:'bottom' } } }
   });
 
-  // Line by selected category across months
   const selected = $('cat-series').value || cats[0];
   const byMonth = new Map();
   allEntries.forEach(e=>{
@@ -330,13 +337,111 @@ async function renderCharts(allEntries, filtered) {
   $('cat-series').onchange = ()=> renderCharts(allEntries, filtered);
 }
 
-// --- Save/Load/Export (unchanged from pro) ---
+async function getFilteredEntriesForExport(){
+  const all = await getAll('entries');
+  const month = $('month').value;
+  const from = $('from').value || null;
+  const to = $('to').value || null;
+  let data = all.slice();
+  if (month) data = data.filter(e => yyyymm(e.date) === month);
+  else if (from || to) data = data.filter(e => inRange(e.date, from, to));
+  return data.sort((a,b)=>a.date.localeCompare(b.date));
+}
+
+async function exportJSON(){
+  const entries = await getFilteredEntriesForExport();
+  const cats = await getCategories();
+  const blob = new Blob([JSON.stringify({ entries, categories: cats }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `kosten-tracker-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function exportPDF(){
+  const entries = await getFilteredEntriesForExport();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(14);
+  doc.text('Kosten-Tracker Export', 14, 18);
+  const rows = entries.map(e => [formatDate(e.date), e.category, fromCents(e.amount)]);
+  doc.autoTable({ head: [['Datum','Kategorie','Betrag']], body: rows, startY: 24, styles:{ fontSize: 10 } });
+  const total = entries.reduce((s,e)=>s+e.amount,0);
+  doc.text(`Summe: ${fromCents(total)}`, 14, doc.lastAutoTable.finalY + 10);
+  doc.save(`kosten-tracker-${new Date().toISOString().slice(0,10)}.pdf`);
+}
+
+async function exportXLSX(){
+  const entries = await getFilteredEntriesForExport();
+  const data = [['Datum','Kategorie','Betrag (EUR)']].concat(entries.map(e => [formatDate(e.date), e.category, (e.amount/100).toFixed(2).replace('.',',')]));
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:12},{wch:20},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Ausgaben');
+  const wbout = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+  const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `kosten-tracker-${new Date().toISOString().slice(0,10)}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
 const TARGET_NAME = 'Kosten_Kalkulation_App.json';
 async function buildSnapshot(){
   const entries = await getAll('entries');
   const categories = await getCategories();
   return JSON.stringify({ entries, categories }, null, 2);
 }
+
+async function chooseStandardFile(){
+  if (!window.showSaveFilePicker) {
+    alert('Dateizugriff wird von diesem Browser nicht vollständig unterstützt.');
+    return;
+  }
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: TARGET_NAME,
+      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+    });
+    await setSavedFileHandle(handle);
+    updateFileStatus();
+    await onSave();
+  } catch (e) {}
+}
+
+async function updateFileStatus(){
+  const el = $('file-status');
+  const handle = await getSavedFileHandle();
+  if (!handle) { el.textContent = 'Keine Standard‑Datei gewählt'; return; }
+  const perm = await handle.queryPermission({ mode: 'readwrite' });
+  el.textContent = `Standard‑Datei gesetzt (${handle.name || 'JSON'}), Berechtigung: ${perm}`;
+}
+
+async function writeSnapshotToHandle(){
+  const auto = await getAutoSync();
+  if (!auto) return;
+  const handle = await getSavedFileHandle();
+  if (!handle) return;
+  try {
+    let perm = await handle.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') {
+      perm = await handle.requestPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') return;
+    }
+    const snapshot = await buildSnapshot();
+    const writable = await handle.createWritable();
+    await writable.write(new Blob([snapshot], {type:'application/json'}));
+    await writable.close();
+  } catch(e) { console.warn('Auto-Sync fehlgeschlagen', e); }
+}
+
+function scheduleSync(){
+  clearTimeout(window._syncTimer);
+  window._syncTimer = setTimeout(writeSnapshotToHandle, 500);
+}
+
 async function onSave(){
   const snapshot = await buildSnapshot();
   if (window.showSaveFilePicker) {
@@ -345,6 +450,7 @@ async function onSave(){
       if (!handle) {
         handle = await window.showSaveFilePicker({ suggestedName: TARGET_NAME, types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }] });
         await setSavedFileHandle(handle);
+        updateFileStatus();
       }
       const writable = await handle.createWritable();
       await writable.write(new Blob([snapshot], {type:'application/json'}));
@@ -359,6 +465,7 @@ async function onSave(){
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 }
+
 async function onLoadKnown(){
   if (window.showOpenFilePicker) {
     try {
@@ -366,6 +473,7 @@ async function onLoadKnown(){
       if (!handle) {
         [handle] = await window.showOpenFilePicker({ multiple:false, types:[{ description: 'JSON', accept: { 'application/json': ['.json'] } }] });
         await setSavedFileHandle(handle);
+        updateFileStatus();
       }
       const file = await handle.getFile();
       const text = await file.text();
@@ -376,6 +484,7 @@ async function onLoadKnown(){
   }
   alert('Bitte „Andere Datei laden…“ verwenden, um die Datei aus „Dateien“ auszuwählen.');
 }
+
 async function onLoadOther(ev){
   const file = ev.target.files?.[0]; if (!file) return;
   const text = await file.text();
@@ -383,6 +492,7 @@ async function onLoadOther(ev){
   ev.target.value='';
   alert('Geladen.');
 }
+
 async function importSnapshot(text){
   const data = JSON.parse(text);
   if (!data || !Array.isArray(data.entries)) throw new Error('Ungültige Datei');
@@ -397,10 +507,12 @@ async function importSnapshot(text){
   }
   await refresh();
 }
+
 async function tryAutoLoadOnStart(){
   if (window.showOpenFilePicker) {
     try {
       const handle = await getSavedFileHandle();
+      const auto = await getAutoSync();
       if (handle) {
         const perm = await handle.queryPermission({ mode: 'read' });
         if (perm === 'granted') {
@@ -409,13 +521,19 @@ async function tryAutoLoadOnStart(){
           await importSnapshot(text);
         }
       }
+      if (auto) scheduleSync();
     } catch (e) { console.warn('Auto-load skipped', e); }
   }
 }
 
-// iOS keyboard visibility helper (for dialogs)
 function setupKeyboardVisibility(){
   const spacer = document.getElementById('keyboard-spacer');
+  const addKbdHandlers = (el) => {
+    if (!el) return;
+    el.addEventListener('focus', () => document.body.classList.add('kbd-open'));
+    el.addEventListener('blur', () => setTimeout(() => document.body.classList.remove('kbd-open'), 250));
+  };
+  ['amount-input','edit-amount','date','edit-date'].forEach(id => { const el = document.getElementById(id); if (el) addKbdHandlers(el); });
   if (window.visualViewport) {
     const onVV = () => {
       const vv = window.visualViewport;
@@ -434,4 +552,5 @@ async function onWipe(){
   await put('meta', DEFAULT_CATS, 'categories');
   await renderCategories();
   await refresh();
+  scheduleSync();
 }

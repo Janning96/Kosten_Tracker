@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Kosten-Kalkulation App</title>
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#0f172a">
@@ -25,6 +25,13 @@
 </header>
 
 <main class="container">
+  <section class="card mobile-hint">
+    <div class="inline">
+      <span class="badge">iPhone-Optimiert</span>
+      <span class="muted">Daten bleiben automatisch erhalten (IndexedDB). Optional: Auto‑Sync in Datei.</span>
+    </div>
+  </section>
+
   <section class="card">
     <h2>Neuer Eintrag</h2>
     <form id="entry-form" class="entry-grid" onsubmit="return false;">
@@ -35,7 +42,7 @@
       <select id="category" name="category" required></select>
 
       <div class="entry-actions">
-        <button type="button" id="btn-open-amount" class="primary" title="Neuen Eintrag anlegen">Eintrag</button>
+        <button type="button" id="btn-open-amount" class="primary big" title="Neuen Eintrag anlegen">Eintrag</button>
         <button type="button" id="btn-manage-cats" class="ghost">Kategorien…</button>
       </div>
     </form>
@@ -95,14 +102,27 @@
         <canvas id="line-chart" height="220"></canvas>
       </div>
     </div>
-    <div class="hint">Tipp: In allen Diagrammen kannst du Kategorien im <b>Legendeneintrag</b> ein/ausblenden.</div>
+    <div class="hint">In allen Diagrammen kannst du Kategorien im <b>Legendeneintrag</b> ein/ausblenden.</div>
+  </section>
+
+  <section class="card">
+    <h2>Datei & Sync</h2>
+    <div class="row wrap">
+      <button id="btn-choose-file" class="primary">Standard‑Datei wählen</button>
+      <button id="btn-clear-file" class="ghost">Entfernen</button>
+      <label class="switch">
+        <input type="checkbox" id="auto-sync">
+        <span>Auto‑Sync aktivieren (Speichern bei Änderungen)</span>
+      </label>
+    </div>
+    <div class="muted" id="file-status">Keine Standard‑Datei gewählt</div>
   </section>
 
   <section class="card">
     <h2>Daten</h2>
     <div class="row wrap">
-      <button id="btn-save" class="primary">Speichern</button>
-      <button id="btn-load" class="ghost">Laden</button>
+      <button id="btn-save" class="ghost">Speichern (manuell)</button>
+      <button id="btn-load" class="ghost">Laden (Standard‑Datei)</button>
       <label class="file">
         <input id="file-load-other" type="file" accept="application/json" hidden>
         <span>Andere Datei laden…</span>
@@ -112,14 +132,9 @@
       <button id="btn-export-xlsx" class="ghost">Export (Excel)</button>
       <button id="btn-wipe" class="danger">Alles löschen</button>
     </div>
-    <small class="muted">
-      „Speichern/Laden“ nutzt – sofern verfügbar – den <em>Dateizugriff des Browsers</em> (Datei „Kosten_Kalkulation_App.json“).
-      Auf iPhone/Safari wirst du beim ersten Speichern um Bestätigung gebeten.
-    </small>
   </section>
 </main>
 
-<!-- Kategorien-Dialog -->
 <dialog id="cats-dialog">
   <form method="dialog" id="cats-form">
     <h3>Kategorien verwalten</h3>
@@ -134,7 +149,6 @@
   </form>
 </dialog>
 
-<!-- Eintrag bearbeiten -->
 <dialog id="edit-dialog">
   <form method="dialog" id="edit-form">
     <h3>Eintrag bearbeiten</h3>
@@ -157,16 +171,14 @@
   </form>
 </dialog>
 
-<!-- Betrag-Eingabe (neu) -->
 <dialog id="amount-dialog">
   <form method="dialog" id="amount-form" class="amount-form">
     <h3>Betrag eingeben</h3>
     <input id="amount-input" inputmode="decimal" placeholder="0,00 €" autofocus required />
     <menu>
       <button value="cancel" class="ghost">Abbrechen</button>
-      <button id="btn-amount-ok" value="ok" class="primary">Sichern</button>
+      <button id="btn-amount-ok" value="ok" class="primary big">Sichern</button>
     </menu>
-    <small class="muted">Tipp: Komma für Cent verwenden, z. B. 12,50</small>
   </form>
 </dialog>
 
