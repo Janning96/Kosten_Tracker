@@ -383,7 +383,7 @@ function groupIntoLines(items){
     byY[y] = (byY[y] || []) .concat([{x: it.transform[4], s: it.str}]);
   });
   const ys = Object.keys(byY).map(n=>Number(n)).sort((a,b)=>a-b);
-  const lines = ys.map(y => byY[y].sort((a,b)=>a.x-b.x).map(t=>t.s).join(' ').replace(/\s+/g,' ').trim()).filter(s=>s);
+  const lines = ys.map(y => byY[y].sort((a,b)=>a.x-b.x).map(t=>t.s).join(' ').replace(/\\s+/g,' ').trim()).filter(s=>s);
   return lines;
 }
 
@@ -403,36 +403,72 @@ function parseBarclays(lines){
     if (/^umsatzübersicht/i.test(l)) { continue; }
     if (/zinssätze/i.test(l)) { break; }
     if (/sonstige umsätze/i.test(l)) { sectionHint = 'gutschrift'; }
-    const m = l.match(/^\s*(\d{2}\.\d{2}\.\d{4})\s+(\d{2}\.\d{2}\.\d{4})\s+(.+?)\s+([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})([+\-–])?\s*$/i);
+    // Format: "DD.MM.YYYY  DD.MM.YYYY  BESCHREIBUNG   1.234,56–" (oder +)
+    const m = l.match(/^\\s*(\\d{2}\\.\\d{2}\\.\\d{4})\\s+(\\d{2}\\.\\d{2}\\.\\d{4})\\s+(.+?)\\s+([0-9]{1,3}(?:\\.[0-9]{3})*,\\d{2})([+\\-–])?\\s*$/i);
     if (m){
       const [, beleg, val, descRaw, amountRaw, trailing] = m;
+      const descNorm = (descRaw||'').toString().trim();
+      // IGNORE: "Gutschrift Manuelle Lastschrift"
+      if (/gutschrift\\s+manuelle\\s+lastschrift/i.test(descNorm)) { continue; }
       const amountStr = amountRaw + (trailing || '');
       let amount_cents;
       try { amount_cents = parseAmountToCents(amountStr, { bank:'barclays', sectionHint }); } catch(e){ continue; }
-      items.push({ source:'barclays_pdf', date: toISO(val), description: descRaw.replace(/\s+/g,' ').trim(), amount_cents, currency:'EUR' });
+      items.push({
+        source:'barclays_pdf',
+        date: toISO(val),
+        description: descNorm.replace(/\\s+/g,' '),
+        amount_cents,
+        currency:'EUR'
+      });
     }
   }
   return items;
 }
 
-// N26 parser
+// N26 parser (enhanced for sections/spaces + ignore 'Barclays' descriptions)
 function parseN26(lines){
   const items = [];
   let bufferDesc = [];
+  let currentSection = 'Hauptkonto';
+  const sectionRe = /^(space|unterkonto)\\s*[:\\-]\\s*(.+)$/i;
+
   for (const ln of lines){
     const l = ln.trim();
     if (!l) continue;
+
+    // Abschnitts-/Space-Erkennung
+    const sec = l.match(sectionRe);
+    if (sec){
+      currentSection = sec[2].trim();
+      continue;
+    }
+
     if (/^vorläufiger kontoauszug/i.test(l)) { continue; }
-    const m = l.match(/^(.*)\s+(\d{2}\.\d{2}\.\d{4})\s+([+\-]?\d{1,3}(?:\.\d{3})*,\d{2})\s*€?\s*$/);
+
+    // Transaktionszeile: "... DD.MM.YYYY +/-1.234,56 €"
+    const m = l.match(/^(.*)\\s+(\\d{2}\\.\\d{2}\\.\\d{4})\\s+([+\\-]?\\d{1,3}(?:\\.\\d{3})*,\\d{2})\\s*€?\\s*$/);
     if (m){
       const [, descLead, dateStr, amtStr] = m;
-      const desc = (bufferDesc.concat([descLead])).join('; ').replace(/\s+/g,' ').trim();
+      const desc = (bufferDesc.concat([descLead])).join('; ').replace(/\\s+/g,' ').trim();
       bufferDesc = [];
+
+      // IGNORE: jede N26-Transaktion deren Beschreibung "Barclays" enthält
+      if (/barclays/i.test(desc)) continue;
+
       try{
-        items.push({ source:'n26_pdf', date: toISO(dateStr), description: desc, amount_cents: parseAmountToCents(amtStr), currency:'EUR' });
+        items.push({
+          source:'n26_pdf',
+          date: toISO(dateStr),
+          description: desc || currentSection,
+          amount_cents: parseAmountToCents(amtStr),
+          currency:'EUR'
+        });
       }catch(e){/* skip */}
     } else {
-      if (!/^(beschreibung|verbuchungsdatum|betrag)$/i.test(l)) bufferDesc.push(l);
+      // Mehrzeilige Beschreibung, aber gängige Labels auslassen
+      if (!/^(beschreibung|verbuchungsdatum|betrag|datum|konto|space|unterkonto)\\b/i.test(l)) {
+        bufferDesc.push(l);
+      }
     }
   }
   return items;
@@ -507,8 +543,8 @@ async function importExcelRange(){
   await refreshTransactions(); await refreshCharts();
 }
 function normalizeDateExcel(v){
-  if (/^\d{2}\.\d{2}\.\d{4}$/.test(v)) return toISO(v);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  if (/^\\d{2}\\.\\d{2}\\.\\d{4}$/.test(v)) return toISO(v);
+  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(v)) return v;
   const n = Number(v);
   if (!isNaN(n) && n>20000 && n<60000){
     const base = new Date(Date.UTC(1899,11,30));
