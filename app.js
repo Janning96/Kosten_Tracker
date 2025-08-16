@@ -360,7 +360,7 @@ async function parseSelectedPDFs(){
         const page = await pdf.getPage(p);
         const txt = await page.getTextContent();
         const lines = groupIntoLines(txt.items);
-        const bank = bankHint || detectBank(lines.join(' '));
+        const bank = bankHint || detectBank(lines.join(' ')); console.debug('Bank erkannt:', bank);
         const items = bank==='barclays' ? parseBarclays(lines) : bank==='n26' ? parseN26(lines) : [];
         preview.push(...items);
       }
@@ -387,13 +387,31 @@ function groupIntoLines(items){
   return lines;
 }
 
-function detectBank(text){
-  const t = text.toLowerCase();
-  if (t.includes('barclays') && (t.includes('umsatzübersicht') || t.includes('betrag (eur)') || t.includes('belegdatum'))) return 'barclays';
-  if (t.includes('vorläufiger kontoauszug') || t.includes(' n26')) return 'n26';
-  return '';
-}
 
+function detectBank(text){
+  const t = (text||'').toLowerCase();
+
+  const barclaysKeys = [
+    'barclays','umsatzübersicht','belegdatum','valutadatum','betrag (eur)','kartennummer','kartenumsätze','zinssätze'
+  ];
+  const n26Keys = [
+    'n26','vorläufiger kontoauszug','spaces','hauptkonto','unterkonto','überweisung gesendet mit n26','de iban','kontoumsätze','n26 bank'
+  ];
+
+  const score = (keys) => keys.reduce((s,k)=> s + (t.includes(k) ? 1 : 0), 0);
+  const sb = score(barclaysKeys);
+  const sn = score(n26Keys);
+
+  if (sb===0 && sn===0){
+    const nDates = (t.match(/\b\d{2}\.\d{2}\.\d{4}\b/g)||[]).length;
+    const nEuro  = (t.match(/\b\d{1,3}(?:\.\d{3})*,\d{2}\s*€?/g)||[]).length;
+    if (nDates>5 && nEuro>5){
+      return 'n26';
+    }
+    return '';
+  }
+  return sn >= sb ? 'n26' : 'barclays';
+}
 // Barclays parser
 function parseBarclays(lines){
   const items = [];
@@ -425,48 +443,46 @@ function parseBarclays(lines){
   return items;
 }
 
-// N26 parser (enhanced for sections/spaces + ignore 'Barclays' descriptions)
+
+// N26 parser (robust, sections + ignore 'Barclays', skip headers/date ranges)
 function parseN26(lines){
   const items = [];
   let bufferDesc = [];
   let currentSection = 'Hauptkonto';
-  const sectionRe = /^(space|unterkonto)\\s*[:\\-]\\s*(.+)$/i;
+  const sectionRe = /^(space|unterkonto)\s*[:\-]\s*(.+)$/i;
+  const headerRe  = /(vorläufiger kontoauszug|kontoumsätze|kontoauszug|monatsübersicht)/i;
+  const rangeRe   = /\b\d{2}\.\d{2}\.(?:\d{2}|\d{4})\s*-\s*\d{2}\.\d{2}\.(?:\d{2}|\d{4})\b/;
 
   for (const ln of lines){
-    const l = ln.trim();
+    const l = (ln||'').trim();
     if (!l) continue;
 
-    // Abschnitts-/Space-Erkennung
-    const sec = l.match(sectionRe);
-    if (sec){
-      currentSection = sec[2].trim();
+    if (sectionRe.test(l)){
+      const m = l.match(sectionRe);
+      currentSection = (m[2]||'').trim() || currentSection;
       continue;
     }
+    if (headerRe.test(l) || rangeRe.test(l)) continue;
 
-    if (/^vorläufiger kontoauszug/i.test(l)) { continue; }
-
-    // Transaktionszeile: "... DD.MM.YYYY +/-1.234,56 €"
-    const m = l.match(/^(.*)\\s+(\\d{2}\\.\\d{2}\\.\\d{4})\\s+([+\\-]?\\d{1,3}(?:\\.\\d{3})*,\\d{2})\\s*€?\\s*$/);
-    if (m){
-      const [, descLead, dateStr, amtStr] = m;
-      const desc = (bufferDesc.concat([descLead])).join('; ').replace(/\\s+/g,' ').trim();
+    const tx = l.match(/^(.*\S)\s+(\d{2}\.\d{2}\.\d{4})\s*([+\-]?\d{1,3}(?:\.\d{3})*,\d{2})\s*€?\s*$/);
+    if (tx){
+      const [, lead, dstr, amstr] = tx;
+      const desc = (bufferDesc.concat([lead])).join('; ').replace(/\s+/g,' ').trim();
       bufferDesc = [];
 
-      // IGNORE: jede N26-Transaktion deren Beschreibung "Barclays" enthält
       if (/barclays/i.test(desc)) continue;
 
       try{
         items.push({
           source:'n26_pdf',
-          date: toISO(dateStr),
+          date: toISO(dstr),
           description: desc || currentSection,
-          amount_cents: parseAmountToCents(amtStr),
+          amount_cents: parseAmountToCents(amstr),
           currency:'EUR'
         });
-      }catch(e){/* skip */}
+      }catch(e){}
     } else {
-      // Mehrzeilige Beschreibung, aber gängige Labels auslassen
-      if (!/^(beschreibung|verbuchungsdatum|betrag|datum|konto|space|unterkonto)\\b/i.test(l)) {
+      if (!/^(beschreibung|verbuchungsdatum|betrag|datum|konto|space|unterkonto)\b/i.test(l)) {
         bufferDesc.push(l);
       }
     }
