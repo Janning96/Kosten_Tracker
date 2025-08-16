@@ -2,17 +2,23 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Kosten-Kalkulation App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kosten-Kalkulation (PDF Import)</title>
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#0f172a">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="styles.css">
+  <!-- Charts -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- PDF.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <!-- jsPDF (+autotable) -->
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+  <!-- SheetJS -->
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- App -->
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -21,163 +27,206 @@
     <span class="logo">€</span>
     <h1>Kosten-Kalkulation</h1>
   </div>
-  <button id="btn-install" class="ghost" hidden>Installieren</button>
+  <nav class="tabs">
+    <button class="tab active" data-tab="import">Import</button>
+    <button class="tab" data-tab="trans">Transaktionen</button>
+    <button class="tab" data-tab="analyse">Analyse</button>
+    <button class="tab" data-tab="einstellungen">Einstellungen</button>
+  </nav>
 </header>
 
 <main class="container">
-  <section class="card mobile-hint">
-    <div class="inline">
-      <span class="badge">iPhone-Optimiert</span>
-      <span class="muted">Daten bleiben automatisch erhalten (IndexedDB). Optional: Auto‑Sync in Datei.</span>
+  <!-- Import -->
+  <section class="tabpane active" id="tab-import">
+    <div class="card">
+      <h2>PDF-Kontoauszüge importieren</h2>
+      <div class="row wrap">
+        <label class="file">
+          <input id="pdf-input" type="file" accept="application/pdf" multiple hidden>
+          <span>PDF auswählen…</span>
+        </label>
+        <button id="btn-parse-pdf" class="primary">Import starten</button>
+        <select id="bank-hint">
+          <option value="">Auto-Erkennung</option>
+          <option value="barclays">Barclays</option>
+          <option value="n26">N26</option>
+        </select>
+      </div>
+      <div id="import-log" class="muted"></div>
+      <div class="table-scroll">
+        <table id="preview-table">
+          <thead><tr>
+            <th>Quelle</th><th>Datum</th><th>Beschreibung</th><th class="num">Betrag</th><th>Status</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="row">
+        <button id="btn-commit-import" class="primary" disabled>Übernehmen</button>
+        <button id="btn-clear-preview" class="ghost">Vorschau leeren</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Excel-Import (Zeitraum auswählen)</h2>
+      <div class="row wrap">
+        <label class="file">
+          <input id="xlsx-input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+          <span>Excel auswählen…</span>
+        </label>
+        <label>Von <input id="imp-from" type="date"></label>
+        <label>Bis <input id="imp-to" type="date"></label>
+        <button id="btn-import-xlsx" class="ghost">Import Excel</button>
+      </div>
+      <small class="muted">Es werden nur Zeilen importiert, deren Datum im gewählten Zeitraum liegt. Erwartete Spalten: Datum, Beschreibung, Betrag (€), Kategorie (optional).</small>
     </div>
   </section>
 
-  <section class="card">
-    <h2>Neuer Eintrag</h2>
-    <form id="entry-form" class="entry-grid" onsubmit="return false;">
-      <label for="date">Datum</label>
-      <input id="date" name="date" type="date" required />
-
-      <label for="category">Kategorie</label>
-      <select id="category" name="category" required></select>
-
-      <div class="entry-actions">
-        <button type="button" id="btn-open-amount" class="primary big" title="Neuen Eintrag anlegen">Eintrag</button>
-        <button type="button" id="btn-manage-cats" class="ghost">Kategorien…</button>
-      </div>
-    </form>
-  </section>
-
-  <section class="card">
-    <h2>Ansicht & Filter</h2>
-    <div class="toolbar">
-      <div class="tool">
-        <label for="month">Monat</label>
-        <input id="month" type="month">
-        <button id="btn-this-month" class="ghost">Diesen Monat</button>
-      </div>
-      <div class="tool">
-        <label for="from">Von</label>
-        <input id="from" type="date">
-        <label for="to">Bis</label>
-        <input id="to" type="date">
-        <button id="btn-apply-range" class="ghost">Zeitraum anwenden</button>
-        <button id="btn-clear-range" class="ghost">Zeitraum löschen</button>
-      </div>
-    </div>
-    <div id="summary" class="summary"></div>
-    <table id="entries-table">
-      <thead>
-        <tr><th>Datum</th><th>Kategorie</th><th class="num">Betrag</th><th></th></tr>
-      </thead>
-      <tbody></tbody>
-      <tfoot>
-        <tr><th colspan="2">Summe</th><th class="num" id="total">—</th><th></th></tr>
-      </tfoot>
-    </table>
-  </section>
-
-  <section class="card charts">
-    <div class="charts-grid">
-      <div>
-        <h2>Trend (gestapelte Balken je Monat)</h2>
-        <canvas id="trend-chart" height="220"></canvas>
-      </div>
-      <div>
-        <h2>Kategorien (Balken)</h2>
-        <canvas id="bar-chart" height="220"></canvas>
-      </div>
-      <div>
-        <h2>Kategorien (Kuchen)</h2>
-        <canvas id="pie-chart" height="220"></canvas>
-      </div>
-      <div>
-        <div class="flex-between">
-          <h2>Monatsentwicklung je Kategorie</h2>
-          <div class="inline">
-            <label for="cat-series">Kategorie</label>
-            <select id="cat-series"></select>
-          </div>
+  <!-- Transaktionen -->
+  <section class="tabpane" id="tab-trans">
+    <div class="card">
+      <h2>Neuer Eintrag</h2>
+      <form class="entry-grid" onsubmit="return false;">
+        <label for="entry-date">Datum</label>
+        <input id="entry-date" type="date">
+        <label for="entry-cat">Kategorie</label>
+        <select id="entry-cat"></select>
+        <div class="entry-actions">
+          <button id="btn-open-amount" class="primary" type="button">Eintrag</button>
+          <button id="btn-manage-cats" class="ghost" type="button">Kategorien…</button>
         </div>
-        <canvas id="line-chart" height="220"></canvas>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Filter</h2>
+      <div class="row wrap">
+        <label>Monat <input id="flt-month" type="month"></label>
+        <label>Von <input id="flt-from" type="date"></label>
+        <label>Bis <input id="flt-to" type="date"></label>
+        <select id="flt-source">
+          <option value="">Alle Quellen</option>
+          <option value="barclays_pdf">Barclays</option>
+          <option value="n26_pdf">N26</option>
+          <option value="excel">Excel</option>
+          <option value="manual">Manuell</option>
+        </select>
+        <select id="flt-cat">
+          <option value="">Alle Kategorien</option>
+        </select>
+        <button id="btn-apply-filter" class="ghost">Anwenden</button>
+        <button id="btn-clear-filter" class="ghost">Löschen</button>
+      </div>
+      <div id="list-summary" class="summary"></div>
+
+      <div class="table-scroll">
+        <table id="tx-table">
+          <thead>
+            <tr><th>Datum</th><th>Beschreibung</th><th>Kategorie</th><th>Quelle</th><th class="num">Betrag</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr><th colspan="4">Summe</th><th class="num" id="tx-total">—</th><th></th></tr>
+          </tfoot>
+        </table>
       </div>
     </div>
-    <div class="hint">In allen Diagrammen kannst du Kategorien im <b>Legendeneintrag</b> ein/ausblenden.</div>
   </section>
 
-  <section class="card">
-    <h2>Datei & Sync</h2>
-    <div class="row wrap">
-      <button id="btn-choose-file" class="primary">Standard‑Datei wählen</button>
-      <button id="btn-clear-file" class="ghost">Entfernen</button>
-      <label class="switch">
-        <input type="checkbox" id="auto-sync">
-        <span>Auto‑Sync aktivieren (Speichern bei Änderungen)</span>
-      </label>
+  <!-- Analyse -->
+  <section class="tabpane" id="tab-analyse">
+    <div class="card">
+      <h2>Zeitraum</h2>
+      <div class="row wrap">
+        <label>Monat <input id="ana-month" type="month"></label>
+        <label>Von <input id="ana-from" type="date"></label>
+        <label>Bis <input id="ana-to" type="date"></label>
+        <button id="btn-ana-apply" class="ghost">Anwenden</button>
+        <button id="btn-ana-clear" class="ghost">Löschen</button>
+      </div>
     </div>
-    <div class="muted" id="file-status">Keine Standard‑Datei gewählt</div>
+
+    <div class="card charts">
+      <div class="charts-grid">
+        <div>
+          <h3>Trend (gestapelte Balken je Monat)</h3>
+          <canvas id="ch-trend" height="220"></canvas>
+        </div>
+        <div>
+          <h3>Kategorien (Balken)</h3>
+          <canvas id="ch-bar" height="220"></canvas>
+        </div>
+        <div>
+          <h3>Kategorien (Kuchen)</h3>
+          <canvas id="ch-pie" height="220"></canvas>
+        </div>
+        <div>
+          <div class="flex-between">
+            <h3>Monatsentwicklung je Kategorie</h3>
+            <div class="inline">
+              <label for="cat-series">Kategorie</label>
+              <select id="cat-series"></select>
+            </div>
+          </div>
+          <canvas id="ch-line" height="220"></canvas>
+        </div>
+      </div>
+      <div class="row wrap">
+        <button id="btn-export-ana-pdf" class="ghost">Analyse als PDF</button>
+        <button id="btn-export-range-xlsx" class="ghost">Zeitraum als Excel</button>
+      </div>
+    </div>
   </section>
 
-  <section class="card">
-    <h2>Daten</h2>
-    <div class="row wrap">
-      <button id="btn-save" class="ghost">Speichern (manuell)</button>
-      <button id="btn-load" class="ghost">Laden (Standard‑Datei)</button>
-      <label class="file">
-        <input id="file-load-other" type="file" accept="application/json" hidden>
-        <span>Andere Datei laden…</span>
-      </label>
-      <button id="btn-export-json" class="ghost">Export (JSON)</button>
-      <button id="btn-export-pdf" class="ghost">Export (PDF)</button>
-      <button id="btn-export-xlsx" class="ghost">Export (Excel)</button>
-      <button id="btn-wipe" class="danger">Alles löschen</button>
+  <!-- Einstellungen -->
+  <section class="tabpane" id="tab-einstellungen">
+    <div class="card">
+      <h2>Kategorien</h2>
+      <ul id="cats-list"></ul>
+      <div class="row">
+        <input id="cat-new" placeholder="Neue Kategorie">
+        <button id="btn-cat-add">Hinzufügen</button>
+      </div>
+      <small class="muted">„Undefiniert“ kann nicht gelöscht werden und steht immer am Ende.</small>
+    </div>
+
+    <div class="card">
+      <h2>Export (Excel, eine Datei)</h2>
+      <div class="row">
+        <button id="btn-export-master-xlsx" class="primary">Finanzen.xlsx exportieren</button>
+      </div>
+      <small class="muted">Erstellt eine Excel mit Monatsblättern + Zusammenfassung.</small>
     </div>
   </section>
 </main>
 
-<dialog id="cats-dialog">
-  <form method="dialog" id="cats-form">
-    <h3>Kategorien verwalten</h3>
-    <ul id="cats-list"></ul>
-    <div class="row">
-      <input id="cat-new" placeholder="Neue Kategorie" />
-      <button type="button" id="btn-cat-add">Hinzufügen</button>
-    </div>
+<!-- Dialogs -->
+<dialog id="amount-dialog">
+  <form method="dialog" id="amount-form" class="amount-form">
+    <h3>Betrag eingeben</h3>
+    <input id="amount-input" inputmode="decimal" placeholder="0,00 €" required>
     <menu>
-      <button value="cancel">Fertig</button>
+      <button value="cancel" class="ghost">Abbrechen</button>
+      <button id="btn-amount-ok" value="ok" class="primary">Sichern</button>
     </menu>
   </form>
 </dialog>
 
 <dialog id="edit-dialog">
   <form method="dialog" id="edit-form">
-    <h3>Eintrag bearbeiten</h3>
+    <h3>Transaktion bearbeiten</h3>
     <div class="row">
-      <label for="edit-date">Datum</label>
-      <input id="edit-date" type="date" required>
+      <label>Datum <input id="ed-date" type="date" required></label>
     </div>
     <div class="row">
-      <label for="edit-category">Kategorie</label>
-      <select id="edit-category" required></select>
+      <label>Kategorie <select id="ed-cat"></select></label>
     </div>
     <div class="row">
-      <label for="edit-amount">Betrag</label>
-      <input id="edit-amount" inputmode="decimal" placeholder="0,00 €" required>
+      <label>Betrag <input id="ed-amount" inputmode="decimal" placeholder="0,00 €" required></label>
     </div>
     <menu>
       <button value="cancel" class="ghost">Abbrechen</button>
       <button id="btn-save-edit" value="ok" class="primary">Speichern</button>
-    </menu>
-  </form>
-</dialog>
-
-<dialog id="amount-dialog">
-  <form method="dialog" id="amount-form" class="amount-form">
-    <h3>Betrag eingeben</h3>
-    <input id="amount-input" inputmode="decimal" placeholder="0,00 €" autofocus required />
-    <menu>
-      <button value="cancel" class="ghost">Abbrechen</button>
-      <button id="btn-amount-ok" value="ok" class="primary big">Sichern</button>
     </menu>
   </form>
 </dialog>
@@ -189,21 +238,6 @@
 <div id="keyboard-spacer" style="height:0;"></div>
 
 <script>
-  let deferredPrompt;
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    const btn = document.getElementById('btn-install');
-    btn.hidden = false;
-    btn.addEventListener('click', async () => {
-      btn.hidden = true;
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice;
-        deferredPrompt = null;
-      }
-    });
-  });
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js');
   }
