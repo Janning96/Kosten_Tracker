@@ -360,8 +360,9 @@ async function parseSelectedPDFs(){
         const page = await pdf.getPage(p);
         const txt = await page.getTextContent();
         const lines = groupIntoLines(txt.items);
-        const bank = bankHint || detectBank(lines.join(' ')); console.debug('Bank erkannt:', bank);
+        const bank = bankHint || detectBank(lines.join(' '));
         const items = bank==='barclays' ? parseBarclays(lines) : bank==='n26' ? parseN26(lines) : [];
+        console.debug('Bank erkannt (Seite', p, '):', bank, 'Items:', items.length);
         preview.push(...items);
       }
     }catch(e){
@@ -383,36 +384,26 @@ function groupIntoLines(items){
     byY[y] = (byY[y] || []) .concat([{x: it.transform[4], s: it.str}]);
   });
   const ys = Object.keys(byY).map(n=>Number(n)).sort((a,b)=>a-b);
-  const lines = ys.map(y => byY[y].sort((a,b)=>a.x-b.x).map(t=>t.s).join(' ').replace(/\\s+/g,' ').trim()).filter(s=>s);
+  const lines = ys.map(y => byY[y].sort((a,b)=>a.x-b.x).map(t=>t.s).join(' ').replace(/\s+/g,' ').trim()).filter(s=>s);
   return lines;
 }
 
-
 function detectBank(text){
   const t = (text||'').toLowerCase();
+  if (t.includes('vorläufiger kontoauszug') || t.includes('space iban') || t.includes('spaces zusammenfassung')) return 'n26';
+  if (t.includes('barclays') && (t.includes('umsatzübersicht') || t.includes('belegdatum') || t.includes('valutadatum'))) return 'barclays';
 
-  const barclaysKeys = [
-    'barclays','umsatzübersicht','belegdatum','valutadatum','betrag (eur)','kartennummer','kartenumsätze','zinssätze'
-  ];
-  const n26Keys = [
-    'n26','vorläufiger kontoauszug','spaces','hauptkonto','unterkonto','überweisung gesendet mit n26','de iban','kontoumsätze','n26 bank'
-  ];
+  const barclaysKeys = ['umsatzübersicht','belegdatum','valutadatum','betrag (eur)','barclays'];
+  const n26Keys = ['n26','vorläufig','space','unterkonto','kontoumsätze','kontoauszug','spaces zusammenfassung'];
 
   const score = (keys) => keys.reduce((s,k)=> s + (t.includes(k) ? 1 : 0), 0);
   const sb = score(barclaysKeys);
   const sn = score(n26Keys);
-
-  if (sb===0 && sn===0){
-    const nDates = (t.match(/\b\d{2}\.\d{2}\.\d{4}\b/g)||[]).length;
-    const nEuro  = (t.match(/\b\d{1,3}(?:\.\d{3})*,\d{2}\s*€?/g)||[]).length;
-    if (nDates>5 && nEuro>5){
-      return 'n26';
-    }
-    return '';
-  }
+  if (sb===0 && sn===0) return '';
   return sn >= sb ? 'n26' : 'barclays';
 }
-// Barclays parser
+
+// Barclays parser (inkl. Ignore-Regel)
 function parseBarclays(lines){
   const items = [];
   let sectionHint = '';
@@ -421,70 +412,69 @@ function parseBarclays(lines){
     if (/^umsatzübersicht/i.test(l)) { continue; }
     if (/zinssätze/i.test(l)) { break; }
     if (/sonstige umsätze/i.test(l)) { sectionHint = 'gutschrift'; }
-    // Format: "DD.MM.YYYY  DD.MM.YYYY  BESCHREIBUNG   1.234,56–" (oder +)
-    const m = l.match(/^\\s*(\\d{2}\\.\\d{2}\\.\\d{4})\\s+(\\d{2}\\.\\d{2}\\.\\d{4})\\s+(.+?)\\s+([0-9]{1,3}(?:\\.[0-9]{3})*,\\d{2})([+\\-–])?\\s*$/i);
+    const m = l.match(/^\s*(\d{2}\.\d{2}\.\d{4})\s+(\d{2}\.\d{2}\.\d{4})\s+(.+?)\s+([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})([+\-–])?\s*$/i);
     if (m){
       const [, beleg, val, descRaw, amountRaw, trailing] = m;
       const descNorm = (descRaw||'').toString().trim();
-      // IGNORE: "Gutschrift Manuelle Lastschrift"
-      if (/gutschrift\\s+manuelle\\s+lastschrift/i.test(descNorm)) { continue; }
+      if (/gutschrift\s+manuelle\s+lastschrift/i.test(descNorm)) { continue; }
       const amountStr = amountRaw + (trailing || '');
       let amount_cents;
       try { amount_cents = parseAmountToCents(amountStr, { bank:'barclays', sectionHint }); } catch(e){ continue; }
-      items.push({
-        source:'barclays_pdf',
-        date: toISO(val),
-        description: descNorm.replace(/\\s+/g,' '),
-        amount_cents,
-        currency:'EUR'
-      });
+      items.push({ source:'barclays_pdf', date: toISO(val), description: descNorm.replace(/\s+/g,' '), amount_cents, currency:'EUR' });
     }
   }
   return items;
 }
 
-
-// N26 parser (robust, sections + ignore 'Barclays', skip headers/date ranges)
+// N26 parser (table/state-machine): scan full doc; collect Beschreibung, Verbuchungsdatum, Betrag
 function parseN26(lines){
   const items = [];
-  let bufferDesc = [];
-  let currentSection = 'Hauptkonto';
-  const sectionRe = /^(space|unterkonto)\s*[:\-]\s*(.+)$/i;
-  const headerRe  = /(vorläufiger kontoauszug|kontoumsätze|kontoauszug|monatsübersicht)/i;
-  const rangeRe   = /\b\d{2}\.\d{2}\.(?:\d{2}|\d{4})\s*-\s*\d{2}\.\d{2}\.(?:\d{2}|\d{4})\b/;
+  let section = 'Hauptkonto';
+  let buf = [];
+  let pendingValueDate = null;
 
-  for (const ln of lines){
-    const l = (ln||'').trim();
-    if (!l) continue;
+  const isHeader = (s) => /^(beschreibung\s+verbuchungsdatum\s+betrag)$/i.test(s.replace(/\s+/g,' ').trim());
+  const isSummary = (s) => /(zusammenfassung|spaces zusammenfassung)/i.test(s);
+  const isSpaceStart = (s) => /^(vorläufiger\s+space\s+kontoauszug)/i.test(s);
+  const reSpaceName = /^space:\s*(.+)$/i;
+  const isLabel = (s) => /^(lastschriften|gutschriften|belastungen|mastercard\s*•|iban:|bic:)/i.test(s);
+  const isWorthless = (s) => /^(erstellt am|vorläufiger kontoauszug|kontoauszug|datum geöffnet:|\d+\s*\/\s*\d+|iban:|bic:|dein alter kontostand|ausgehende transaktionen|eingehende transaktionen|dein neuer kontostand|anmerkung|dein guthaben|team)$/i.test(s);
 
-    if (sectionRe.test(l)){
-      const m = l.match(sectionRe);
-      currentSection = (m[2]||'').trim() || currentSection;
+  const reWertstellung = /^wertstellung\s+(\d{2}\.\d{2}\.\d{4})$/i;
+  const rePosting = /^(\d{2}\.\d{2}\.\d{4})\s+([+\-]?\d{1,3}(?:\.\d{3})*,\d{2})€?$/;
+
+  for (let raw of lines){
+    let line = (raw||'').trim();
+    if (!line) continue;
+    line = line.replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim();
+
+    if (isSpaceStart(line)) { continue; }
+    const sn = line.match(reSpaceName);
+    if (sn) { section = sn[1].trim(); continue; }
+
+    if (isSummary(line) || isHeader(line)) { buf = []; pendingValueDate = null; continue; }
+    if (isWorthless(line)) { continue; }
+    if (isLabel(line)) { continue; }
+
+    const wm = line.match(reWertstellung);
+    if (wm) { pendingValueDate = wm[1]; continue; }
+
+    const pm = line.match(rePosting);
+    if (pm && pendingValueDate){
+      const verbuch = pm[1];
+      const amount = pm[2];
+      const desc = buf.join(' • ').replace(/\s*•\s*$/,'').trim() || section;
+      if (/barclays/i.test(desc)) { buf = []; pendingValueDate = null; continue; }
+      try{
+        items.push({ source:'n26_pdf', date: toISO(verbuch), description: desc, amount_cents: parseAmountToCents(amount), currency:'EUR' });
+      }catch(e){}
+      buf = []; pendingValueDate = null;
       continue;
     }
-    if (headerRe.test(l) || rangeRe.test(l)) continue;
 
-    const tx = l.match(/^(.*\S)\s+(\d{2}\.\d{2}\.\d{4})\s*([+\-]?\d{1,3}(?:\.\d{3})*,\d{2})\s*€?\s*$/);
-    if (tx){
-      const [, lead, dstr, amstr] = tx;
-      const desc = (bufferDesc.concat([lead])).join('; ').replace(/\s+/g,' ').trim();
-      bufferDesc = [];
-
-      if (/barclays/i.test(desc)) continue;
-
-      try{
-        items.push({
-          source:'n26_pdf',
-          date: toISO(dstr),
-          description: desc || currentSection,
-          amount_cents: parseAmountToCents(amstr),
-          currency:'EUR'
-        });
-      }catch(e){}
-    } else {
-      if (!/^(beschreibung|verbuchungsdatum|betrag|datum|konto|space|unterkonto)\b/i.test(l)) {
-        bufferDesc.push(l);
-      }
+    if (line && !/^\d{2}\.\d{2}\.\d{4}$/.test(line)) {
+      buf.push(line);
+      if (buf.length>4) buf.shift();
     }
   }
   return items;
@@ -559,8 +549,8 @@ async function importExcelRange(){
   await refreshTransactions(); await refreshCharts();
 }
 function normalizeDateExcel(v){
-  if (/^\\d{2}\\.\\d{2}\\.\\d{4}$/.test(v)) return toISO(v);
-  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(v)) return v;
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(v)) return toISO(v);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
   const n = Number(v);
   if (!isNaN(n) && n>20000 && n<60000){
     const base = new Date(Date.UTC(1899,11,30));
