@@ -67,28 +67,62 @@ function parseBarclays(lines){
 }
 
 // N26 parser (more tolerant)
+
+// N26 parser (broad pattern search across lines)
 function parseN26(lines){
   const items=[]; let section='Hauptkonto'; let buf=[]; let pending=null;
-  const isHeader=s=>/^(beschreibung\s+verbuchungsdatum\s+betrag)$/i.test(s.replace(/\s+/g,' ').trim());
+
+  const isHeader=s=>/beschreibung/i.test(s) && /betrag/i.test(s);
   const isSummary=s=>/(zusammenfassung|spaces zusammenfassung)/i.test(s);
-  const isSpaceStart=s=>/^(vorläufiger\s+space\s+kontoauszug)/i.test(s);
+  const isSpaceStart=s=>/vorläufiger\s+space\s+kontoauszug/i.test(s);
   const reSpaceName=/^space:\s*(.+)$/i;
   const isLabel=s=>/^(lastschriften|gutschriften|belastungen|mastercard\s*•|iban:|bic:)/i.test(s);
   const isWorthless=s=>/^(erstellt am|vorläufiger kontoauszug|kontoauszug|datum geöffnet:|\d+\s*\/\s*\d+|iban:|bic:|dein alter kontostand|ausgehende transaktionen|eingehende transaktionen|dein neuer kontostand|anmerkung|dein guthaben|team)$/i.test(s);
 
-  const reW=/^wertstellung\s+(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))$/i;
-  const reP=/^(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))\s+([+\-−–-]?\s*\d{1,3}(?:\.\d{3})*,\d{2})\s*€?$/;
-  const reC=/wertstellung\s+(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))\s+(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))\s+([+\-−–-]?\s*\d{1,3}(?:\.\d{3})*,\d{2})\s*€?/i;
+  const reW=/^wertstellung(?:sdatum)?\s*:?\s*(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))$/i;
+  const reTwoDateAmt=/^(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))\s+(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))\s+([+\-−–-]?\s*\d{1,3}(?:\.\d{3})*,\d{2})\s*€?$/i;
+  const reDateAmt=/^(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))\s+([+\-−–-]?\s*\d{1,3}(?:\.\d{3})*,\d{2})\s*€?$/i;
 
-  for(const raw of lines){
+  for(let raw of lines){
     let line=(raw||'').trim(); if(!line) continue;
     line=line.replace(/\u00A0/g,' ').replace(/\u2212/g,'-').replace(/\s+/g,' ').trim();
 
-    const cmb=line.match(reC);
-    if(cmb){
-      const verbuch=cmb[2]; const amount=cmb[3];
-      const desc=chooseCounterparty(buf.length?buf:[section]);
-      if(/barclays/i.test(desc)){buf=[];pending=null;continue}
+    if(isSpaceStart(line)) continue;
+    const sn=line.match(reSpaceName); if(sn){ section=sn[1].trim(); continue; }
+    if(isSummary(line)||isHeader(line)) { buf=[]; pending=null; continue; }
+    if(isWorthless(line)||isLabel(line)) continue;
+
+    // 3-part line
+    let m = line.match(reTwoDateAmt);
+    if(m){
+      const [, , verbuch, amount] = m;
+      const desc = chooseCounterparty(buf.length?buf:[section]);
+      if(/barclays/i.test(desc)){ buf=[]; pending=null; continue; }
+      try{ items.push({ source:'n26_pdf', date: toISO(verbuch), description: desc, amount_cents: parseAmountToCents(amount), currency:'EUR' }); }catch{}
+      buf=[]; pending=null; continue;
+    }
+
+    // Wertstellung only
+    const w = line.match(reW);
+    if(w){ pending = w[1]; continue; }
+
+    // Posting-date + amount (with pending)
+    const d = line.match(reDateAmt);
+    if(d && pending){
+      const [, verbuch, amount] = d;
+      const desc = chooseCounterparty(buf.length?buf:[section]);
+      if(/barclays/i.test(desc)){ buf=[]; pending=null; continue; }
+      try{ items.push({ source:'n26_pdf', date: toISO(verbuch), description: desc, amount_cents: parseAmountToCents(amount), currency:'EUR' }); }catch{}
+      buf=[]; pending=null; continue;
+    }
+
+    if(!/^\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4})$/.test(line)){
+      buf.push(line); if(buf.length>8) buf.shift();
+    }
+  }
+  return items;
+}
+
       try{items.push({source:'n26_pdf',date:toISO(verbuch),description:desc,amount_cents:parseAmountToCents(amount),currency:'EUR'})}catch{}
       buf=[]; pending=null; continue;
     }
@@ -138,7 +172,7 @@ async function parseSelectedPDFs(){
       logDebug(`Datei: ${f.name} • Seiten: ${pdf.numPages}`);
       for(let p=1;p<=pdf.numPages;p++){
         const page=await pdf.getPage(p); const txt=await page.getTextContent(); const lines=groupIntoLines(txt.items);
-        const bank=bankHint||detectBank(lines.join(' ')); const items= bank==='barclays'?parseBarclays(lines): bank==='n26'?parseN26(lines): [];
+        const bank=bankHint||detectBank(lines.join(' '))||(/n26/i.test(f.name)?'n26':''); const items= bank==='barclays'?parseBarclays(lines): bank==='n26'?parseN26(lines): [];
         logDebug(`Seite ${p}: Bank=${bank||'?'}, Zeilen=${lines.length}, Treffer=${items.length}`);
         preview.push(...items);
       }
