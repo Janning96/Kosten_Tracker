@@ -7,13 +7,13 @@
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#0f172a">
   <link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=2025-08-18-6">
+  <link rel="stylesheet" href="styles.css?v=2025-08-18-7">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script defer src="app.js?v=2025-08-18-6"></script>
+  <script defer src="app.js?v=2025-08-18-7"></script>
 </head>
 <body>
 <header class="appbar">
@@ -49,4 +49,40 @@
 </main>
 <footer class="footer"><small id="ver">Offline‑fähig • IndexedDB • PWA</small></footer>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./service-worker.js');}</script>
+
+<script>
+  // Watchdog: if app.js didn't boot, show fix & allow cache purge
+  window.__APP_BOOT__ = false;
+  window.forceUpdate = async function(){
+    try{
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.update()));
+      }
+      if (window.caches && caches.keys) {
+        const ks = await caches.keys();
+        await Promise.all(ks.map(k => caches.delete(k)));
+      }
+    } catch(e) { console.warn('Update-Fehler (inline)', e); }
+    location.reload();
+  };
+  setTimeout(function(){
+    if(!window.__APP_BOOT__){
+      var el = document.getElementById('health') || (function(){
+        var s=document.createElement('section'); s.id='health'; s.className='health';
+        var main=document.querySelector('main.container'); if(main) main.prepend(s); return s;
+      })();
+      el.textContent = 'Die App-Skripte wurden nicht geladen. Tippe auf „App aktualisieren“, um Cache zu leeren.';
+      el.hidden = false;
+      var btn = document.getElementById('btn-force-update');
+      if(!btn){
+        var row = document.createElement('div'); row.className='row';
+        var b = document.createElement('button'); b.className='ghost'; b.textContent='App aktualisieren (Notfall)'; b.onclick=window.forceUpdate;
+        row.appendChild(b);
+        var main = document.querySelector('main.container'); if(main) main.prepend(row);
+      }
+    }
+  }, 1500);
+</script>
+
 </body></html>

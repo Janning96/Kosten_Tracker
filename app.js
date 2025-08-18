@@ -1,4 +1,5 @@
-const APP_VERSION='v2025-08-18-6';
+window.__APP_BOOT__ = true;
+const APP_VERSION='v2025-08-18-7';
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
 function logDebug(line){const el=document.getElementById('debug-log'); if(el){el.textContent += line + '\n';}}

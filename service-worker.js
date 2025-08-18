@@ -1,4 +1,4 @@
-const CACHE='kosten-tracker-v5_1';
+const CACHE='kosten-tracker-v5_3';
 const ASSETS=['./','./index.html','./styles.css?v=2025-08-18-6','./app.js?v=2025-08-18-6','./manifest.webmanifest','./icon-192.png','./icon-512.png',
   'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
   'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'];
