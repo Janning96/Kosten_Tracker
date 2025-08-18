@@ -1,5 +1,5 @@
-# Kosten-Tracker Pro
-- N26 Parser mit Kombi-Zeilen
-- Gegenpartei-Namensextraktion (Armin Hofmann, DB Vertrieb GmbH u.a.)
-- Ignore-Regeln (Barclays in N26-Beschreibung; Barclays „Gutschrift Manuelle Lastschrift“)
-- Exporte/Charts/Offline
+# Kosten-Tracker v5 (stabil)
+- Robuste iOS-Styles, feste Headline-Größen
+- Service-Worker Cache-Busting & Update-Button
+- N26/Barclays PDF-Import mit Namens-Extraktion
+- Exporte, Charts, Offline
