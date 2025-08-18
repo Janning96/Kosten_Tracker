@@ -53,4 +53,15 @@
 
 <script defer src="app.js?v=2025-08-18-v6"></script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./service-worker.js');}</script>
+
+<div id="nojs-recover" style="position:fixed;left:12px;right:12px;bottom:18px;z-index:99999;display:block">
+  <a href="recover.html" style="display:block;text-align:center;text-decoration:none;background:#22c55e;color:#052e16;border-radius:12px;padding:12px 14px;font-weight:700;border:1px solid #1f2937">
+    ⚠️ App reagiert nicht? Tippe hier für „Recovery“
+  </a>
+</div>
+<script>
+  // Wenn app.js korrekt bootet, entfernen wir den Fallback-Link
+  (function(){ setTimeout(function(){ if (window.__APP_BOOT__) { var el=document.getElementById('nojs-recover'); if(el) el.remove(); } }, 800); })();
+</script>
+
 </body></html>
