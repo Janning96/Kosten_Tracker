@@ -1,4 +1,4 @@
-const APP_VERSION='v2025-08-18-6';
+const APP_VERSION='SAFE-2025-08-18'
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
 function logDebug(line){const el=document.getElementById('debug-log'); if(el){el.textContent += line + '\n';}}
@@ -198,3 +198,4 @@ async function refreshCharts(){/* no-op minimal for this build */}
 
 // Update
 async function forceUpdate(){try{if('serviceWorker'in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.update()))}if(window.caches?.keys){const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)))}}catch(e){console.warn('Update-Fehler',e)}location.reload()}
+
