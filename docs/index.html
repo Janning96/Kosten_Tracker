@@ -14,17 +14,23 @@
   </header>
   <main class='container'>
     <section class='card'>
-      <h2>1) Barclays-PDF auswählen</h2>
-      <label class='btn'>
-        <input id='barclays-file' type='file' accept='application/pdf,.pdf' hidden />
-        Barclays PDF wählen
-      </label>
-      <p class='hint'>Erwartet Zeilen mit: <code>Belegdatum Valutadatum Beschreibung Betrag±</code> (Betrag mit Nachzeichen wie <code>23,11-</code>). Mehrzeilige Beschreibungen werden automatisch zusammengeführt.</p>
-      <div class='actions'><button id='clear-all' class='secondary'>Alles löschen</button></div>
+      <h2>1) Barclays-PDF auswählen & importieren</h2>
+      <div class='import-grid'>
+        <label class='btn'>
+          <input id='barclays-file' type='file' accept='application/pdf,.pdf' hidden />
+          Barclays PDF wählen
+        </label>
+        <button id='run-import' class='primary' disabled>Import starten</button>
+        <label class='switch'><input type='checkbox' id='debug-toggle' /> <span>Debug anzeigen</span></label>
+      </div>
+      <p class='hint'>Erwartet Zeilen: <code>Belegdatum Valutadatum Beschreibung Betrag±</code> (z. B. <code>23,11-</code>). Mehrzeilige Beschreibungen werden zusammengeführt.</p>
+      <div class='actions'>
+        <button id='clear-all' class='secondary'>Alles löschen</button>
+      </div>
     </section>
     <section class='card'>
       <h2>2) Ergebnisse</h2>
-      <div class='stats'><span id='count'>0</span> Buchungen gefunden</div>
+      <div class='stats'><strong><span id='count'>0</span></strong> Buchungen gefunden</div>
       <div class='table-wrap'>
         <table id='tx-table'>
           <thead><tr><th>#</th><th>Original-Beschreibung</th><th>Bereinigt (editierbar)</th><th>Betrag</th><th>Valutadatum</th></tr></thead>
@@ -33,19 +39,31 @@
       </div>
       <div class='actions'><button id='export-csv'>Als CSV exportieren</button></div>
     </section>
+    <section id='debug-card' class='card' style='display:none'>
+      <h3>Debug</h3>
+      <div class='debug-grid'>
+        <div><h4>Abschnittserkennung</h4><pre id='debug-section'></pre></div>
+        <div><h4>Textauszug</h4><pre id='debug-snippet'></pre></div>
+      </div>
+    </section>
   </main>
   <footer class='container foot'><small>© 2025 – Static client-side app. PDF-Parsing via PDF.js.</small></footer>
   <script type='module'>
     import { extractPdfText } from './utils/pdf.js';
     import { exportToCsv } from './utils/csv.js';
     import { normalizeDescription } from './utils/normalize.js';
-    import { parseBarclaysPdfRobust } from './parsers/barclays_pdf.js';
+    import { parseBarclaysPdfRobust, diagnoseBarclays } from './parsers/barclays_pdf.js';
     const barcInput=document.getElementById('barclays-file');
+    const importBtn=document.getElementById('run-import');
     const txBody=document.getElementById('tx-body');
     const clearBtn=document.getElementById('clear-all');
     const exportBtn=document.getElementById('export-csv');
     const countEl=document.getElementById('count');
-    let rows=[];
+    const debugToggle=document.getElementById('debug-toggle');
+    const debugCard=document.getElementById('debug-card');
+    const debugSection=document.getElementById('debug-section');
+    const debugSnippet=document.getElementById('debug-snippet');
+    let rows=[]; let lastText='';
     function render(){
       txBody.innerHTML=''; countEl.textContent=String(rows.length);
       if(!rows.length){const tr=document.createElement('tr');tr.id='empty-row';const td=document.createElement('td');td.colSpan=5;td.style.textAlign='center';td.style.opacity=.7;td.textContent='Noch keine Daten…';tr.appendChild(td);txBody.appendChild(tr);return;}
@@ -53,7 +71,7 @@
         const tr=document.createElement('tr');
         const tdIdx=document.createElement('td'); tdIdx.textContent=i+1; tr.appendChild(tdIdx);
         const tdOrig=document.createElement('td'); tdOrig.textContent=r.original||''; tr.appendChild(tdOrig);
-        const tdClean=document.createElement('td'); const input=document.createElement('input'); input.type='text'; input.value=r.clean||''; input.addEventListener('input',(e)=>{r.clean=e.target.value;}); tdClean.appendChild(input); tr.appendChild(tdClean);
+        const tdClean=document.createElement('td'); const input=document.createElement('input'); input.type='text'; input.value=r.clean||''; input.addEventListener('input',(e)=>{ r.clean=e.target.value; }); tdClean.appendChild(input); tr.appendChild(tdClean);
         const tdAmt=document.createElement('td'); tdAmt.textContent=Number(r.amount).toFixed(2); tr.appendChild(tdAmt);
         const tdDt=document.createElement('td'); tdDt.textContent=r.postingDate; tr.appendChild(tdDt);
         txBody.appendChild(tr);
@@ -62,25 +80,37 @@
     function push(list){
       for(const tx of list){
         const desc=String(tx.description||'');
-        if(desc.trim().toLowerCase()==='gutschrift manuelle lastschrift') continue;
+        if(desc.trim().toLowerCase()==='gutschrift manuelle lastschrift') continue; // wie besprochen
         const clean=normalizeDescription(desc);
         rows.push({original:desc,clean,amount:Number(tx.amount),postingDate:tx.postingDate});
       }
       render();
     }
     async function handlePdf(){
-      const file=barcInput.files?.[0]; if(!file) return;
-      try{ const text=await extractPdfText(file); const list=parseBarclaysPdfRobust(text); rows=[]; push(list); }
-      catch(err){ alert('Fehler beim Barclays-Import: '+(err?.message||err)); console.error(err); }
-      finally{ barcInput.value=''; }
+      const file=barcInput.files?.[0]; if(!file){ alert('Bitte zuerst eine Barclays-PDF wählen.'); return; }
+      try{
+        importBtn.disabled=true;
+        const text=await extractPdfText(file); lastText=text;
+        const list=parseBarclaysPdfRobust(text); rows=[]; push(list);
+        if(debugToggle.checked){
+          const info=diagnoseBarclays(text);
+          debugSection.textContent=JSON.stringify(info,null,2);
+          debugSnippet.textContent=(text.slice(Math.max(0,info.windowStart), Math.min(text.length, info.windowEnd))) || text.slice(0,2000);
+        }
+        if(!rows.length){ alert('Keine Buchungszeilen erkannt. Aktiviere „Debug anzeigen“, um einen Textauszug zu prüfen.'); }
+      }catch(err){
+        alert('Fehler beim Barclays-Import: '+(err?.message||err)); console.error(err);
+      }finally{ importBtn.disabled=false; }
     }
-    barcInput.addEventListener('change', handlePdf);
-    clearBtn.addEventListener('click',()=>{rows=[];render();});
+    barcInput.addEventListener('change',()=>{ importBtn.disabled=!barcInput.files?.length; });
+    importBtn.addEventListener('click', handlePdf);
+    clearBtn.addEventListener('click',()=>{ rows=[]; render(); });
     exportBtn.addEventListener('click',()=>{
-      if(!rows.length){alert('Keine Daten zum Export.');return;}
+      if(!rows.length){ alert('Keine Daten zum Export.'); return; }
       const exportRows=rows.map(r=>({original:r.original,clean:r.clean,amount:Number(r.amount).toFixed(2),postingDate:r.postingDate}));
       exportToCsv(exportRows, `barclays_export_${new Date().toISOString().slice(0,10)}.csv`);
     });
+    debugToggle.addEventListener('change',()=>{ debugCard.style.display = debugToggle.checked?'block':'none'; });
     window.addEventListener('load',()=>{ if(!window['pdfjsLib']) alert('PDF.js konnte nicht geladen werden. Prüfe Internetverbindung oder binde pdf.min.js lokal ein.'); });
   </script>
 </body></html>
