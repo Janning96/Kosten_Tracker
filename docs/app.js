@@ -1,5 +1,5 @@
 window.__APP_BOOT__=true;
-const APP_VERSION='v6.4-docs';
+const APP_VERSION='v6.4.1-docs';
 
 // ----- Helpers -----
 const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
@@ -84,22 +84,61 @@ function parseBarclays(lines){
 }
 
 // ----- N26 Parser (robust) -----
+
 function parseN26(lines){
-  const items=[]; let section='Hauptkonto'; let buf=[]; let pending=null;
+  const items=[]; let section='Hauptkonto'; let buf=[]; let pendingDate=null;
   const isHeader=s=>/beschreibung/i.test(s)&&/betrag/i.test(s);
   const isSummary=s=>/(zusammenfassung|spaces zusammenfassung)/i.test(s);
   const isSpaceStart=s=>/vorläufiger\s+space\s+kontoauszug/i.test(s);
   const reSpaceName=/^space:\s*(.+)$/i;
   const isLabel=s=>/^(lastschriften|gutschriften|belastungen|mastercard\s*•|iban:|bic:)/i.test(s);
   const isWorthless=s=>/^(erstellt am|vorläufiger kontoauszug|kontoauszug|datum geöffnet:|\d+\s*\/\s*\d+|iban:|bic:|dein alter kontostand|ausgehende transaktionen|eingehende transaktionen|dein neuer kontostand|anmerkung|dein guthaben|team)$/i.test(s);
-  const reW=/^wertstellung(?:sdatum)?\s*:?\s*(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))$/i;
-  const reTwoDateAmt=/^(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))\s+(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))\s+([+\-−–-]?\s*\d{1,3}(?:\.\d{3})*,\d{2})\s*€?$/i;
-  const reDateAmt=/^(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))\s+([+\-−–-]?\s*\d{1,3}(?:\.\d{3})*,\d{2})\s*€?$/i;
-  for(const raw of lines){
-    let line=(raw||'').trim(); if(!line)continue;
-    line=line.replace(/\u00A0/g,' ').replace(/\u2212/g,'-').replace(/\s+/g,' ').trim();
+
+  const reDate=/\b(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))\b/;
+  const reAmount=/(?:[+\-−–-]\s*)?\d{1,3}(?:\.\d{3})*,\d{2}\s*€?|(?:\d{1,3}(?:\.\d{3})*,\d{2})\s*[+\-−–-]\s*€?/;
+
+  for(let raw of lines){
+    let line=(raw||'').replace(/\u00A0/g,' ').replace(/\u2212/g,'-').replace(/\s+/g,' ').trim();
+    if(!line) continue;
+
     if(isSpaceStart(line)) continue;
-    const sn=line.match(reSpaceName); if(sn){section=sn[1].trim(); continue;}
+    const sn=line.match(reSpaceName); if(sn){ section=sn[1].trim(); continue; }
+    if(isSummary(line)||isHeader(line)){ buf=[]; pendingDate=null; continue; }
+    if(isWorthless(line)||isLabel(line)) continue;
+
+    const hasDate = reDate.test(line);
+    const hasAmount = reAmount.test(line);
+
+    if(hasDate && hasAmount){
+      const mD = line.match(reDate)[1];
+      const mA = line.match(reAmount)[0];
+      const desc = chooseCounterparty(buf.length?buf:[section]);
+      if(/barclays/i.test(desc)){ buf=[]; pendingDate=null; continue; }
+      try{
+        items.push({ source:'n26_pdf', date: toISO(mD), description: desc, amount_cents: parseAmountToCents(mA), currency:'EUR' });
+      }catch{}
+      buf=[]; pendingDate=null; continue;
+    }
+
+    if(hasDate && !hasAmount){ pendingDate = line.match(reDate)[1]; continue; }
+
+    if(hasAmount && pendingDate){
+      const mA = line.match(reAmount)[0];
+      const desc = chooseCounterparty(buf.length?buf:[section]);
+      if(/barclays/i.test(desc)){ buf=[]; pendingDate=null; continue; }
+      try{
+        items.push({ source:'n26_pdf', date: toISO(pendingDate), description: desc, amount_cents: parseAmountToCents(mA), currency:'EUR' });
+      }catch{}
+      buf=[]; pendingDate=null; continue;
+    }
+
+    if(!hasDate && !/^\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4})$/.test(line)){
+      buf.push(line); if(buf.length>10) buf.shift();
+    }
+  }
+  return items;
+}
+
     if(isSummary(line)||isHeader(line)){buf=[];pending=null;continue}
     if(isWorthless(line)||isLabel(line)) continue;
     let m=line.match(reTwoDateAmt);
