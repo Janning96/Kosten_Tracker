@@ -2,95 +2,194 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Kosten-Kalkulation</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0f172a">
-  <link rel="icon" href="icon-192.png">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=2025-08-18-v6.4">
-  <!-- Libs müssen vor app.js kommen -->
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script defer src="app.js?v=2025-08-18-v6.4"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Finance Import App</title>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-<header class="appbar">
-  <div class="brand"><span class="logo">€</span><h1 class="title">Kosten‑Kalkulation</h1></div>
-  <nav class="tabs">
-    <button class="tab active" data-tab="import">Import</button>
-    <button class="tab" data-tab="trans">Transaktionen</button>
-    <button class="tab" data-tab="analyse">Analyse</button>
-    <button class="tab" data-tab="einstellungen">Einstellungen</button>
-  </nav>
-</header>
+  <header class="container">
+    <h1>Finance Import App</h1>
+    <p>Kleines, statisches Tool zum Import & Bereinigen (N26, Barclays) – GitHub Pages ready.</p>
+  </header>
 
-<main class="container">
-  <section id="health" class="health" hidden></section>
+  <main class="container">
+    <section class="card">
+      <h2>1) Daten importieren</h2>
+      <div class="import-grid">
+        <div>
+          <label class="btn">
+            <input id="n26-file" type="file" accept="application/pdf,.pdf" hidden />
+            N26 PDF wählen
+          </label>
+          <p class="hint">Erkennt automatisch Hauptkonto + Spaces. Tabellen: <em>Description | Posting Date | Amount</em> (getrennte oder kombinierte Zeilen).</p>
+        </div>
 
-  <section class="tabpane active" id="tab-import">
-    <div class="card">
-      <h2>PDF‑Kontoauszüge importieren</h2>
-      <div class="row wrap">
-        <label class="file"><input id="pdf-input" type="file" accept="application/pdf" multiple hidden><span>PDF auswählen…</span></label>
-        <button id="btn-parse-pdf" class="primary">Import starten</button>
-        <select id="bank-hint"><option value="">Auto‑Erkennung</option><option value="barclays">Barclays</option><option value="n26">N26</option></select>
+        <div>
+          <label class="btn">
+            <input id="barclays-file" type="file" accept=".csv,text/csv" hidden />
+            Barclays CSV wählen
+          </label>
+          <p class="hint">Ignoriert automatisch: <code>Gutschrift Manuelle Lastschrift</code>.</p>
+        </div>
       </div>
-      <div id="import-log" class="muted"></div>
-      <details id="debug" class="debug"><summary>Debug</summary><pre id="debug-log"></pre></details>
-      <div class="table-scroll">
-        <table id="preview-table"><thead><tr><th>Quelle</th><th>Datum</th><th>Beschreibung</th><th class="num">Betrag</th><th>Status</th></tr></thead><tbody></tbody></table>
+      <div class="actions">
+        <button id="clear-all" class="secondary">Alles löschen</button>
       </div>
-      <div class="row"><button id="btn-commit-import" class="primary" disabled>Übernehmen</button><button id="btn-clear-preview" class="ghost">Vorschau leeren</button></div>
-    </div>
-  </section>
+    </section>
 
-  <section class="tabpane" id="tab-trans">
-    <div class="card">
-      <h2>Transaktionen</h2>
-      <div class="table-scroll">
-        <table id="tx-table"><thead><tr><th>Datum</th><th>Beschreibung</th><th>Kategorie</th><th>Quelle</th><th class="num">Betrag</th><th></th></tr></thead><tbody></tbody><tfoot><tr><th colspan="4">Summe</th><th id="tx-total" class="num">—</th><th></th></tr></tfoot></table>
+    <section class="card">
+      <h2>2) Bereinigte Buchungen prüfen & korrigieren</h2>
+      <div class="table-wrap">
+        <table id="tx-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Original-Beschreibung</th>
+              <th>Bereinigt (editierbar)</th>
+              <th>Betrag</th>
+              <th>Buchungsdatum</th>
+              <th>Quelle</th>
+            </tr>
+          </thead>
+          <tbody id="tx-body">
+            <tr id="empty-row"><td colspan="6" style="text-align:center; opacity:.7">Noch keine Daten…</td></tr>
+          </tbody>
+        </table>
       </div>
-    </div>
-  </section>
-
-  <section class="tabpane" id="tab-analyse">
-    <div class="card">
-      <h2>Analyse</h2>
-      <div class="charts-grid">
-        <div><h3>Trend</h3><canvas id="ch-trend" height="220"></canvas></div>
-        <div><h3>Kategorien (Balken)</h3><canvas id="ch-bar" height="220"></canvas></div>
-        <div><h3>Kategorien (Kuchen)</h3><canvas id="ch-pie" height="220"></canvas></div>
-        <div><h3>Linie je Kategorie</h3><select id="cat-series"></select><canvas id="ch-line" height="220"></canvas></div>
+      <div class="actions">
+        <button id="export-csv">Als CSV exportieren</button>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="tabpane" id="tab-einstellungen">
-    <div class="card">
-      <h2>Einstellungen</h2>
-      <div class="row">
-        <button id="btn-export-master-xlsx" class="primary">Finanzen.xlsx exportieren</button>
-        <button id="btn-force-update" class="ghost">App aktualisieren</button>
-      </div>
-      <div id="version" class="muted"></div>
-    </div>
-  </section>
-</main>
+    <section class="card small">
+      <h3>Einstellungen (Permanent)</h3>
+      <ul class="bullets">
+        <li>Barclays-Import: Ignoriere <code>Gutschrift Manuelle Lastschrift</code>.</li>
+        <li>N26-Import: Ignoriere Buchungen, deren Beschreibung <code>Barclays</code> enthält.</li>
+        <li>N26 Parser: Scanne gesamtes Dokument (Main + Spaces), erkenne Tabellen <em>Description | Posting Date | Amount</em>, parse getrennte & kombinierte Zeilen, normalisiere Unicode-Minus & NBSP.</li>
+        <li>Beschreibung normalisieren: Speichere nur Händler-Hauptnamen (z. B. <em>AMAZON PAYMENTS EUROPE S.C.A.</em> → <em>Amazon</em>, <em>PayPal Europe S.a.r.l. et Cie S.C.A</em> → <em>PayPal</em>…). Korrigierbar in der Tabelle.</li>
+      </ul>
+    </section>
+  </main>
 
-<footer class="footer"><small id="ver">Offline‑fähig • IndexedDB • PWA</small></footer>
+  <footer class="container foot">
+    <small>© 2025 – Static, client-side only. Keine externen Abhängigkeiten.</small>
+  </footer>
 
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./service-worker.js');}</script>
+  <script type="module">
+    import { normalizeDescription } from './utils/normalize.js';
+    import { exportToCsv } from './utils/csv.js';
+    import { parseN26Pdf } from './parsers/n26.js';
+    import { parseBarclaysCsv } from './parsers/barclays.js';
 
-<!-- Recovery-Link, falls app.js nicht bootet -->
-<div id="nojs-recover" style="position:fixed;left:12px;right:12px;bottom:18px;z-index:99999;display:block">
-  <a href="recover.html" style="display:block;text-align:center;text-decoration:none;background:#22c55e;color:#052e16;border-radius:12px;padding:12px 14px;font-weight:700;border:1px solid #1f2937">
-    ⚠️ App reagiert nicht? Tippe hier für „Recovery“
-  </a>
-</div>
-<script>setTimeout(function(){ if (window.__APP_BOOT__) { var el=document.getElementById('nojs-recover'); if(el) el.remove(); } }, 800);</script>
+    const n26Input = document.getElementById('n26-file');
+    const barcInput = document.getElementById('barclays-file');
+    const txBody   = document.getElementById('tx-body');
+    const clearBtn = document.getElementById('clear-all');
+    const exportBtn= document.getElementById('export-csv');
+
+    /** In-Memory Store */
+    let rows = [];
+
+    function render() {
+      txBody.innerHTML = '';
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        tr.id = 'empty-row';
+        const td = document.createElement('td');
+        td.colSpan = 6; td.style.textAlign = 'center'; td.style.opacity = .7;
+        td.textContent = 'Noch keine Daten…';
+        tr.appendChild(td); txBody.appendChild(tr); return;
+      }
+
+      rows.forEach((r, i) => {
+        const tr = document.createElement('tr');
+        // #
+        const tdIdx = document.createElement('td');
+        tdIdx.textContent = i + 1; tr.appendChild(tdIdx);
+        // Original
+        const tdOrig = document.createElement('td');
+        tdOrig.textContent = r.original || ''; tr.appendChild(tdOrig);
+        // Clean (editable)
+        const tdClean = document.createElement('td');
+        const input = document.createElement('input');
+        input.type = 'text'; input.value = r.clean || '';
+        input.addEventListener('input', (e) => { r.clean = e.target.value; });
+        tdClean.appendChild(input); tr.appendChild(tdClean);
+        // Amount
+        const tdAmt = document.createElement('td'); tdAmt.textContent = r.amount; tr.appendChild(tdAmt);
+        // Date
+        const tdDt = document.createElement('td'); tdDt.textContent = r.postingDate; tr.appendChild(tdDt);
+        // Source
+        const tdSrc = document.createElement('td'); tdSrc.textContent = r.source; tr.appendChild(tdSrc);
+
+        txBody.appendChild(tr);
+      });
+    }
+
+    function pushTransactions(list) {
+      // Apply merchant normalization + permanent ignore rules
+      for (const tx of list) {
+        const desc = (tx.description || '').toString();
+        // N26 ignore rule: description contains 'Barclays'
+        if (tx.source === 'N26' && /barclays/i.test(desc)) continue;
+        // Barclays ignore rule: exact 'Gutschrift Manuelle Lastschrift'
+        if (tx.source === 'Barclays' && desc.trim().toLowerCase() === 'gutschrift manuelle lastschrift') continue;
+
+        const clean = normalizeDescription(desc);
+        rows.push({
+          original: desc,
+          clean,
+          amount: tx.amount,
+          postingDate: tx.postingDate,
+          source: tx.source,
+        });
+      }
+      render();
+    }
+
+    n26Input.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0]; if (!file) return;
+      try {
+        const list = await parseN26Pdf(file);
+        pushTransactions(list);
+      } catch (err) {
+        alert('Fehler beim N26-Import: ' + (err?.message || err));
+        console.error(err);
+      } finally {
+        e.target.value = '';
+      }
+    });
+
+    barcInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0]; if (!file) return;
+      try {
+        const list = await parseBarclaysCsv(file);
+        pushTransactions(list);
+      } catch (err) {
+        alert('Fehler beim Barclays-Import: ' + (err?.message || err));
+        console.error(err);
+      } finally {
+        e.target.value = '';
+      }
+    });
+
+    clearBtn.addEventListener('click', () => { rows = []; render(); });
+
+    exportBtn.addEventListener('click', () => {
+      if (!rows.length) { alert('Keine Daten zum Export.'); return; }
+      const exportRows = rows.map(r => ({
+        original: r.original,
+        clean: r.clean,
+        amount: r.amount,
+        postingDate: r.postingDate,
+        source: r.source,
+      }));
+      const name = `export_${new Date().toISOString().slice(0,10)}.csv`;
+      exportToCsv(exportRows, name);
+    });
+
+    render();
+  </script>
 </body>
 </html>
