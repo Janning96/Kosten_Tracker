@@ -1,12 +1,10 @@
 :root {
-  --bg: #0b1220; /* dark blue-ish */
+  --bg: #0b1220;
   --card: #121a2b;
   --fg: #e8eefc;
   --muted: #9db2d4;
   --accent: #3a86ff;
-  --accent-2: #6ae3ff;
   --ring: rgba(58,134,255,.5);
-  --ok: #00c853;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -17,27 +15,23 @@ body {
   color: var(--fg);
 }
 .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
-header h1 { margin: 0 0 8px; font-weight: 800; letter-spacing: .2px; }
+header h1 { margin: 0 0 8px; font-weight: 800; }
 header p { margin: 0; color: var(--muted); }
-
 .card { background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; padding: 20px; margin: 18px 0; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
 .card.small { padding: 16px; }
-
 .import-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 .actions { display: flex; gap: 12px; margin-top: 12px; }
-
-.btn, button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; background: linear-gradient(180deg, rgba(58,134,255,.16), rgba(58,134,255,.10)); border: 1px solid rgba(255,255,255,.1);
+.btn, button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px;
+  background: linear-gradient(180deg, rgba(58,134,255,.16), rgba(58,134,255,.10)); border: 1px solid rgba(255,255,255,.1);
   border-radius: 12px; cursor: pointer; user-select: none; color: var(--fg); text-decoration: none; font-weight: 600; }
 .btn:hover, button:hover { border-color: rgba(255,255,255,.25); box-shadow: 0 0 0 4px var(--ring); }
 button.secondary { background: linear-gradient(180deg, rgba(157,178,212,.12), rgba(157,178,212,.08)); }
-
 .table-wrap { overflow: auto; border-radius: 12px; border: 1px solid rgba(255,255,255,.08); }
 #tx-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 #tx-table th, #tx-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.08); }
 #tx-table thead th { position: sticky; top: 0; background: #0d1526; text-align: left; }
 #tx-table input[type="text"] { width: 100%; padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,.2); background: #0f1730; color: var(--fg); outline: none; }
 #tx-table input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-
 .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
 .bullets { margin: 8px 0 0 18px; color: var(--muted); }
 .foot { opacity: .7; text-align: center; }
