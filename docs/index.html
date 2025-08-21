@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Kosten-Kalkulation</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="styles.css?v=2025-08-18-v6.3">
+
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script defer src="app.js?v=2025-08-18-v6.3"></script>
+</head>
+<body>
+  <header class="appbar">
+    <div class="brand"><span class="logo">€</span><h1 class="title">Kosten-Kalkulation</h1></div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="import">Import</button>
+      <button class="tab" data-tab="trans">Transaktionen</button>
+      <button class="tab" data-tab="analyse">Analyse</button>
+      <button class="tab" data-tab="einstellungen">Einstellungen</button>
+    </nav>
+  </header>
+  <main class="container">
+    <section id="health" class="health" hidden></section>
+    <section class="tabpane active" id="tab-import">
+      <div class="card">
+        <h2>PDF-Kontoauszüge importieren</h2>
+        <div class="row wrap">
+          <label class="file">
+            <input id="pdf-input" type="file" accept="application/pdf" multiple hidden>
+            <span>PDF auswählen…</span>
+          </label>
+          <button id="btn-parse-pdf" class="primary">Import starten</button>
+          <select id="bank-hint">
+            <option value="">Auto-Erkennung</option>
+            <option value="barclays">Barclays</option>
+            <option value="n26">N26</option>
+          </select>
+        </div>
+        <div id="import-log" class="muted"></div>
+        <details id="debug" class="debug"><summary>Debug</summary><pre id="debug-log"></pre></details>
+        <div class="table-scroll">
+          <table id="preview-table">
+            <thead><tr><th>Quelle</th><th>Datum</th><th>Beschreibung</th><th class="num">Betrag</th><th>Status</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="row">
+          <button id="btn-commit-import" class="primary" disabled>Übernehmen</button>
+          <button id="btn-clear-preview" class="ghost">Vorschau leeren</button>
+        </div>
+      </div>
+    </section>
+    <section class="tabpane" id="tab-trans">
+      <div class="card">
+        <h2>Transaktionen</h2>
+        <div class="table-scroll">
+          <table id="tx-table">
+            <thead><tr><th>Datum</th><th>Beschreibung</th><th>Kategorie</th><th>Quelle</th><th class="num">Betrag</th><th></th></tr></thead>
+            <tbody></tbody>
+            <tfoot><tr><th colspan="4">Summe</th><th id="tx-total" class="num">—</th><th></th></tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+    <section class="tabpane" id="tab-analyse">
+      <div class="card charts">
+        <h2>Analyse</h2>
+        <div class="charts-grid">
+          <div><h3>Trend</h3><canvas id="ch-trend" height="220"></canvas></div>
+          <div><h3>Kategorien (Balken)</h3><canvas id="ch-bar" height="220"></canvas></div>
+          <div><h3>Kategorien (Kuchen)</h3><canvas id="ch-pie" height="220"></canvas></div>
+          <div><h3>Linie je Kategorie</h3><select id="cat-series"></select><canvas id="ch-line" height="220"></canvas></div>
+        </div>
+      </div>
+    </section>
+    <section class="tabpane" id="tab-einstellungen">
+      <div class="card">
+        <h2>Einstellungen</h2>
+        <div class="row">
+          <button id="btn-export-master-xlsx" class="primary">Finanzen.xlsx exportieren</button>
+          <button id="btn-force-update" class="ghost">App aktualisieren</button>
+        </div>
+        <div id="version" class="muted"></div>
+      </div>
+    </section>
+  </main>
+  <footer class="footer">
+    <small id="ver">Offline-fähig • IndexedDB • PWA</small>
+  </footer>
+  <script>
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.register('./service-worker.js');
+    }
+  </script>
+</body>
+</html>
